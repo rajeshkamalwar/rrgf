@@ -355,9 +355,28 @@ const MandatoryDisclosure = () => {
     return s;
   }, [classXSupportingDocs, classXIISupportingDocs]);
 
-  const docsAcademicRemainder = useMemo(
-    () => docsAcademic.filter((d) => !pinnedAcademicDocIds.has(d.id)),
-    [docsAcademic, pinnedAcademicDocIds],
+  // CBSE Section B: only compliance/legal certs — fees, SMC, PTA, calendar go to Section C
+  const DOCS_C_KW = ['fee', 'smc', 'management committee', 'pta', 'parent teacher', 'calendar', 'three-year result', 'board examination', 'annual academic'];
+  const docsBCompliance = useMemo(
+    () => docsB.filter((doc) => {
+      const info = (doc.information ?? '').toLowerCase();
+      return !DOCS_C_KW.some((kw) => info.includes(kw));
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [docsB],
+  );
+  const docsBComplianceIds = useMemo(
+    () => new Set(docsBCompliance.map((doc) => doc.id)),
+    [docsBCompliance],
+  );
+
+  // CBSE Section C: fees / calendar / SMC / PTA + non-class-specific academic docs
+  const docsCMain = useMemo(
+    () => [
+      ...docsB.filter((doc) => !docsBComplianceIds.has(doc.id)),
+      ...docsAcademic.filter((doc) => !pinnedAcademicDocIds.has(doc.id)),
+    ],
+    [docsB, docsBComplianceIds, docsAcademic, pinnedAcademicDocIds],
   );
 
   const ytHref = useMemo(() => {
@@ -372,13 +391,13 @@ const MandatoryDisclosure = () => {
 
   const teacherListHref = useMemo(() => documentHref(d.teacherListUrl), [d.teacherListUrl]);
 
-  /** After data hydrates from /api/mpd — hide nag once Section B + teacher list CSV are both resolved. */
+  /** After data hydrates from /api/mpd — hide nag once Section B compliance docs + teacher list are resolved. */
   const showMandatoryUploadReminder = useMemo(() => {
     if (loading) return false;
     if (!teacherListHref) return true;
-    if (!docsB.length) return true;
-    return docsB.some((row) => !isMandatoryPortalUploadResolved(row));
-  }, [loading, docsB, teacherListHref]);
+    if (!docsBCompliance.length) return true;
+    return docsBCompliance.some((row) => !isMandatoryPortalUploadResolved(row));
+  }, [loading, docsBCompliance, teacherListHref]);
 
   const showYoutubeHeroReminder = useMemo(
     () => !loading && !ytLooksValid,
@@ -642,7 +661,7 @@ const MandatoryDisclosure = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {docsB.map((item, index) => {
+                    {docsBCompliance.map((item, index) => {
                       const show =
                         item.status === '✓ Available' ||
                         item.status === 'Available' ||
@@ -672,15 +691,74 @@ const MandatoryDisclosure = () => {
         </div>
       </section>
 
-      {/* C — Staff */}
+      {/* C — Result and Academics */}
       <section className="py-16 bg-school-green-light/10" aria-labelledby="mpd-c">
         <div className="container mx-auto px-4">
           <div className="flex items-center gap-3 mb-8">
             <div className="bg-school-green w-12 h-12 rounded-full flex items-center justify-center">
-              <Users className="h-6 w-6 text-white" aria-hidden />
+              <BookOpen className="h-6 w-6 text-white" aria-hidden />
             </div>
             <h2 id="mpd-c" className="text-3xl font-bold text-school-secondary">
-              C — Staff (Teaching / Support)
+              C — Result and Academics
+            </h2>
+          </div>
+
+          {docsCMain.length > 0 && (
+            <Card className="mb-8">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-school-green text-white">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">S.No</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">Documents / Particulars</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold">PDF / Record</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {docsCMain.map((item, index) => {
+                      const show =
+                        item.status === '✓ Available' ||
+                        item.status === 'Available' ||
+                        (item.link && item.link !== '#');
+                      const href = documentHref(item.link);
+                      return (
+                        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          <td className="px-6 py-4 text-sm font-medium text-school-secondary">{item.sno}</td>
+                          <td className="px-6 py-4 text-sm text-school-secondary">
+                            {item.information || item.document}
+                          </td>
+                          <td className="px-6 py-4">
+                            {show && href ? (
+                              <DisclosureDocLink variant="green" label="View document" link={item.link} />
+                            ) : (
+                              <span className="text-sm text-muted-foreground">{item.status}</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          <Card className="p-8 overflow-x-auto">
+            {renderOutcomeTable('RESULT: CLASS X', d.results.classX, classXSupportingDocs)}
+            {renderOutcomeTable('RESULT: CLASS XII', d.results.classXII, classXIISupportingDocs)}
+          </Card>
+        </div>
+      </section>
+
+      {/* D — Staff (Teaching) */}
+      <section className="py-16 bg-white" aria-labelledby="mpd-d">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="bg-school-accent w-12 h-12 rounded-full flex items-center justify-center">
+              <Users className="h-6 w-6 text-school-secondary" aria-hidden />
+            </div>
+            <h2 id="mpd-d" className="text-3xl font-bold text-school-secondary">
+              D — Staff (Teaching)
             </h2>
           </div>
 
@@ -751,15 +829,15 @@ const MandatoryDisclosure = () => {
         </div>
       </section>
 
-      {/* D — Infrastructure */}
-      <section className="py-16 bg-white" aria-labelledby="mpd-d">
+      {/* E — School Infrastructure */}
+      <section className="py-16 bg-school-green-light/10" aria-labelledby="mpd-e">
         <div className="container mx-auto px-4">
           <div className="flex items-center gap-3 mb-8">
-            <div className="bg-school-accent w-12 h-12 rounded-full flex items-center justify-center">
-              <Building2 className="h-6 w-6 text-school-secondary" aria-hidden />
+            <div className="bg-school-green w-12 h-12 rounded-full flex items-center justify-center">
+              <Building2 className="h-6 w-6 text-white" aria-hidden />
             </div>
-            <h2 id="mpd-d" className="text-3xl font-bold text-school-secondary">
-              D — School Infrastructure
+            <h2 id="mpd-e" className="text-3xl font-bold text-school-secondary">
+              E — School Infrastructure
             </h2>
           </div>
 
@@ -799,96 +877,56 @@ const MandatoryDisclosure = () => {
               <CardContent className="border-t py-6">
                 <h3 className="font-semibold text-school-secondary mb-3">Supporting infrastructure document</h3>
                 <DisclosureDocLink
-                  variant="accent"
+                  variant="green"
                   label="View infrastructure dossier"
                   link={d.infrastructure.infrastructureDocLink}
                 />
               </CardContent>
             ) : null}
           </Card>
-        </div>
-      </section>
 
-      {/* E — Results */}
-      <section className="py-16 bg-school-green-light/10" aria-labelledby="mpd-e">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="bg-school-green w-12 h-12 rounded-full flex items-center justify-center">
-              <BookOpen className="h-6 w-6 text-white" aria-hidden />
-            </div>
-            <h2 id="mpd-e" className="text-3xl font-bold text-school-secondary">
-              E — Result (Class&nbsp;X &amp; XII)
-            </h2>
-          </div>
-
-          <Card className="p-8 overflow-x-auto">
-            {renderOutcomeTable('RESULT: CLASS X', d.results.classX, classXSupportingDocs)}
-            {renderOutcomeTable('RESULT: CLASS XII', d.results.classXII, classXIISupportingDocs)}
-
-            {(docsAcademicRemainder.length > 0 || docsInfra.length > 0) && (
-              <div className="mt-12 space-y-8">
-                {docsAcademicRemainder.length > 0 ? (
-                  <div>
-                    <h3 className="text-xl font-bold text-school-secondary mb-4">
-                      Additional academic disclosure uploads (Board results / summaries)
-                    </h3>
-                    <div className="overflow-x-auto border rounded-lg">
-                      <table className="w-full">
-                        <thead className="bg-muted">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-sm">S.No</th>
-                            <th className="px-4 py-3 text-left text-sm">Particular</th>
-                            <th className="px-4 py-3 text-left text-sm">File</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {docsAcademicRemainder.map((item, idx) => (
-                            <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                              <td className="px-4 py-3 text-sm">{item.sno}</td>
-                              <td className="px-4 py-3 text-sm">{item.information}</td>
-                              <td className="px-4 py-3">
+          {docsInfra.length > 0 && (
+            <div className="mt-8">
+              <h3 className="text-xl font-bold text-school-secondary mb-4">
+                Infrastructure certificates uploaded on portal
+              </h3>
+              <Card>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-school-green text-white">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">S.No</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">Certificate</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold">File</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {docsInfra.map((item, idx) => {
+                        const show =
+                          item.status === '✓ Available' ||
+                          item.status === 'Available' ||
+                          (item.link && item.link !== '#');
+                        const href = documentHref(item.link);
+                        return (
+                          <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-6 py-4 text-sm font-medium">{item.sno}</td>
+                            <td className="px-6 py-4 text-sm">{item.information}</td>
+                            <td className="px-6 py-4">
+                              {show && href ? (
                                 <DisclosureDocLink variant="green" label="View" link={item.link} />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : null}
-
-                {docsInfra.length > 0 ? (
-                  <div>
-                    <h3 className="text-xl font-bold text-school-secondary mb-4">
-                      Infrastructure certificates uploaded on portal
-                    </h3>
-                    <div className="overflow-x-auto border rounded-lg">
-                      <table className="w-full">
-                        <thead className="bg-muted">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-sm">S.No</th>
-                            <th className="px-4 py-3 text-left text-sm">Certificate</th>
-                            <th className="px-4 py-3 text-left text-sm">File</th>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">{item.status}</span>
+                              )}
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {docsInfra.map((item, idx) => (
-                            <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                              <td className="px-4 py-3 text-sm">{item.sno}</td>
-                              <td className="px-4 py-3 text-sm">{item.information}</td>
-                              <td className="px-4 py-3">
-                                <DisclosureDocLink variant="accent" label="View" link={item.link} />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </Card>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+          )}
         </div>
       </section>
 
