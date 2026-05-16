@@ -60,19 +60,6 @@ try {
     $publicController = new PublicController();
     $adminController = new AdminController();
     
-    // Temporary diagnostic — remove after confirming routing works
-    if ($path === 'debug-uri') {
-        echo json_encode([
-            'path'               => $path,
-            'envUri'             => $envUri,
-            'REQUEST_URI'        => $_SERVER['REQUEST_URI'] ?? null,
-            'RRGF_API_URI'       => $_SERVER['RRGF_API_URI'] ?? null,
-            'REDIRECT_RRGF_API_URI' => $_SERVER['REDIRECT_RRGF_API_URI'] ?? null,
-            'getenv_RRGF'        => getenv('RRGF_API_URI') ?: null,
-        ]);
-        exit;
-    }
-
     // Public routes
     if ($path === 'enquiry' && $method === 'POST') {
         $publicController->submitEnquiry();
