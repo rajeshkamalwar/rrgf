@@ -61,7 +61,7 @@ const Footer = () => {
               <li><Link to="/academics" className="text-school-secondary-light hover:text-white transition-colors">Academics</Link></li>
 
               <li><Link to="/admissions" className="text-school-secondary-light hover:text-white transition-colors">Admissions</Link></li>
-              <li><Link to="/mandatory-disclosure" className="text-school-secondary-light hover:text-white transition-colors">Mandatory Disclosure</Link></li>
+              <li><Link to="/mandatory-public-disclosure" className="text-school-secondary-light hover:text-white transition-colors">Mandatory Public Disclosure</Link></li>
             </ul>
           </div>
 
@@ -120,7 +120,7 @@ const Footer = () => {
               © 2024 RR Greenfield International School, Madhepura, Bihar. All rights reserved.
             </div>
             <div className="flex flex-wrap gap-6 text-sm">
-              <Link to="/mandatory-disclosure" className="text-school-secondary-light hover:text-white transition-colors">Mandatory Disclosure</Link>
+              <Link to="/mandatory-public-disclosure" className="text-school-secondary-light hover:text-white transition-colors">Mandatory Disclosure</Link>
             </div>
           </div>
           <div className="border-t border-school-secondary-light/20 mt-6 pt-4 text-center">

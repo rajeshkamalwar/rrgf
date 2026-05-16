@@ -57,6 +57,9 @@ try {
     elseif ($path === 'documents' && $method === 'GET') {
         $publicController->getDocuments();
     }
+    elseif ($path === 'mpd' && $method === 'GET') {
+        $publicController->getMpdBundle();
+    }
     elseif ($path === 'hero-images' && $method === 'GET') {
         $publicController->getHeroImages();
     }
@@ -89,6 +92,18 @@ try {
         }
         elseif ($path === 'admin/smtp/test-email' && $method === 'POST') {
             $adminController->sendTestEmail();
+        }
+        elseif ($path === 'admin/mpd/sample-teachers' && $method === 'GET') {
+            $adminController->downloadMpdTeacherSample();
+        }
+        elseif ($path === 'admin/mpd/teacher-list' && $method === 'POST') {
+            $adminController->uploadMpdTeacherList();
+        }
+        elseif ($path === 'admin/mpd' && $method === 'GET') {
+            $adminController->getMpdAdmin();
+        }
+        elseif ($path === 'admin/mpd' && $method === 'PUT') {
+            $adminController->updateMpd();
         }
         // Documents routes
         elseif ($pathParts[1] === 'documents' && count($pathParts) === 3 && $method === 'PUT') {
@@ -172,11 +187,7 @@ try {
     else {
         Response::error('Route not found', 404);
     }
-} catch (PDOException $e) {
-    error_log("Database Error: " . $e->getMessage() . " | Code: " . $e->getCode());
-    Response::error('Database connection error. Please check database configuration.', 500);
 } catch (Exception $e) {
-    error_log("API Error: " . $e->getMessage() . " | File: " . $e->getFile() . " | Line: " . $e->getLine() . " | Trace: " . $e->getTraceAsString());
-    // In production, don't expose internal errors
+    error_log("API Error: " . $e->getMessage() . " | Trace: " . $e->getTraceAsString());
     Response::error('Internal server error', 500);
 }

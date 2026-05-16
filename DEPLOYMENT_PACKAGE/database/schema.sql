@@ -200,30 +200,48 @@ CREATE TABLE IF NOT EXISTS `smtp_config` (
 -- --------------------------------------------------------
 
 --
+-- CBSE Appendix-IX MPD disclosure (JSON snapshot row)
+--
+
+CREATE TABLE IF NOT EXISTS `mpd_disclosure` (
+  `id` tinyint unsigned NOT NULL DEFAULT 1 PRIMARY KEY,
+  `payload_json` longtext NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `mpd_disclosure` (`id`, `payload_json`) VALUES (1, '{}');
+
+-- --------------------------------------------------------
+
+--
 -- Insert default documents data
 -- These match the mandatory disclosure requirements
 --
 
 INSERT INTO `documents` (`id`, `category`, `sno`, `document`, `information`, `link`, `status`) VALUES
-('doc-1', 'documents', '1', 'Affidavit', NULL, '#', 'Not Available'),
-('doc-2', 'documents', '2', 'Trust Deed', NULL, '#', 'Not Available'),
-('doc-3', 'documents', '3', 'Registration Certificate', NULL, '#', 'Not Available'),
-('doc-4', 'documents', '4', 'NOC', NULL, '#', 'Not Available'),
-('doc-5', 'documents', '5', 'RTE', NULL, '#', 'Not Available'),
-('doc-6', 'documents', '6', 'Self Certification Proforma', NULL, '#', 'Not Available'),
-('doc-7', 'documents', '7', 'PTA', NULL, '#', 'Not Available'),
-('doc-8', 'documents', '8', 'SMC List', NULL, '#', 'Not Available'),
+('doc-1', 'documents', '1', NULL, 'Affiliation/Upgradation Letter and Recent Extension of Affiliation, if any', '#', 'Not Applicable'),
+('doc-2', 'documents', '2', NULL, 'Societies/Trust/Company Registration/Renewal Certificate, as applicable', '/documents/trustdeed.pdf', '✓ Available'),
+('doc-3', 'documents', '3', NULL, 'Registration Certificate', '/documents/Registration Certificate.pdf', '✓ Available'),
+('doc-4', 'documents', '4', NULL, 'NOC', '/documents/NOC.pdf', '✓ Available'),
+('doc-5', 'documents', '5', NULL, 'RTE', '/documents/RTE.pdf', '✓ Available'),
+('doc-6', 'documents', '6', NULL, 'Self Certification Proforma', '/documents/Self Certification proforma.pdf', '✓ Available'),
+('doc-7', 'documents', '7', NULL, 'PTA', '/documents/PTA.pdf', '✓ Available'),
+('doc-8', 'documents', '8', NULL, 'SMC List', '/documents/SMC_List.pdf', '✓ Available'),
+('doc-9', 'documents', '9', NULL, 'Fees structure', '/documents/Fees structure.pdf', '✓ Available'),
 
 ('acad-1', 'academic', '1', NULL, 'Result of Class IX (2023-24)', '#', 'Not Available'),
 ('acad-2', 'academic', '2', NULL, 'Result of Class X (2023-24)', '#', 'Not Available'),
 ('acad-3', 'academic', '3', NULL, 'Result of Class XI (2023-24)', '#', 'Not Available'),
 ('acad-4', 'academic', '4', NULL, 'Result of Class XII (2023-24)', '#', 'Not Available'),
+('acad-5', 'academic', '5', NULL, 'School Calendar', '/documents/Calander.pdf', '✓ Available'),
 
 ('infra-1', 'infrastructure', '1', NULL, 'No. and size of the class rooms (in sq mtr)', '#', 'Not Available'),
 ('infra-2', 'infrastructure', '2', NULL, 'No. and size of laboratories including computer labs (in sq mtr)', '#', 'Not Available'),
 ('infra-3', 'infrastructure', '3', NULL, 'No. and size of other rooms (in sq mtr)', '#', 'Not Available'),
-('infra-4', 'infrastructure', '4', NULL, 'Drinking Water Sanitation certificate', '#', 'Not Available'),
-('infra-5', 'infrastructure', '5', NULL, 'Water testing report', '#', 'Not Available'),
-('infra-6', 'infrastructure', '6', NULL, 'Building Safety certificate', '#', 'Not Available'),
-('infra-7', 'infrastructure', '7', NULL, 'Fire certificate', '#', 'Not Available'),
-('infra-8', 'infrastructure', '8', NULL, 'INFRASTRUCTURE', '#', 'Not Available');
+('infra-4', 'infrastructure', '4', NULL, 'Drinking Water Sanitation certificate', '/documents/Drinking water Sanitation certificate.pdf', '✓ Available'),
+('infra-5', 'infrastructure', '5', NULL, 'Water testing report', '/documents/Water testing report.pdf', '✓ Available'),
+('infra-6', 'infrastructure', '6', NULL, 'Building Safety certificate', '/documents/Building safty certificate.pdf', '✓ Available'),
+('infra-7', 'infrastructure', '7', NULL, 'Fire certificate', '/documents/fire.pdf', '✓ Available'),
+('infra-8', 'infrastructure', '8', NULL, 'INFRASTRUCTURE DETAILS DOCUMENT', '/documents/INFRASTRUCTURE.pdf', '✓ Available'),
+('infra-9', 'infrastructure', '9', NULL, 'Land certificate', '/documents/land.pdf', '✓ Available'),
+('infra-10', 'infrastructure', '10', NULL, 'Infrastructure layout / site photograph (JPEG)', '/documents/infradoc.jpeg', '✓ Available');

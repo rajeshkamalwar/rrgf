@@ -57,6 +57,9 @@ try {
     elseif ($path === 'documents' && $method === 'GET') {
         $publicController->getDocuments();
     }
+    elseif ($path === 'mpd' && $method === 'GET') {
+        $publicController->getMpdBundle();
+    }
     elseif ($path === 'hero-images' && $method === 'GET') {
         $publicController->getHeroImages();
     }
@@ -89,6 +92,18 @@ try {
         }
         elseif ($path === 'admin/smtp/test-email' && $method === 'POST') {
             $adminController->sendTestEmail();
+        }
+        elseif ($path === 'admin/mpd/sample-teachers' && $method === 'GET') {
+            $adminController->downloadMpdTeacherSample();
+        }
+        elseif ($path === 'admin/mpd/teacher-list' && $method === 'POST') {
+            $adminController->uploadMpdTeacherList();
+        }
+        elseif ($path === 'admin/mpd' && $method === 'GET') {
+            $adminController->getMpdAdmin();
+        }
+        elseif ($path === 'admin/mpd' && $method === 'PUT') {
+            $adminController->updateMpd();
         }
         // Documents routes
         elseif ($pathParts[1] === 'documents' && count($pathParts) === 3 && $method === 'PUT') {

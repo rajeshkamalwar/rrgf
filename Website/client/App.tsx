@@ -33,6 +33,7 @@ const PublicLayout = () => {
           <Route path="/admissions" element={<Admissions />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/mandatory-disclosure" element={<MandatoryDisclosure />} />
+          <Route path="/mandatory-public-disclosure" element={<MandatoryDisclosure />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

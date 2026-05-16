@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/../services/Database.php';
 require_once __DIR__ . '/../utils/Response.php';
+require_once __DIR__ . '/../utils/Request.php';
 require_once __DIR__ . '/../middleware/Auth.php';
 require_once __DIR__ . '/../services/EmailService.php';
 require_once __DIR__ . '/../utils/FileUpload.php';
@@ -26,8 +27,8 @@ class AdminController {
      * POST /api/admin/login
      */
     public function login() {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
+        $data = Request::jsonBody();
+
         if (empty($data['username']) || empty($data['password'])) {
             Response::error('Username and password are required');
         }
@@ -44,8 +45,7 @@ class AdminController {
      * GET /api/admin/check-auth
      */
     public function checkAuth() {
-        $headers = getallheaders();
-        $sessionId = $headers['x-session-id'] ?? $headers['X-Session-Id'] ?? null;
+        $sessionId = Auth::getSessionHeaderId();
         
         if ($this->auth->verifySession($sessionId)) {
             Response::success(['authenticated' => true]);
@@ -58,8 +58,7 @@ class AdminController {
      * POST /api/admin/logout
      */
     public function logout() {
-        $headers = getallheaders();
-        $sessionId = $headers['x-session-id'] ?? $headers['X-Session-Id'] ?? null;
+        $sessionId = Auth::getSessionHeaderId();
         
         if ($sessionId) {
             $this->auth->destroySession($sessionId);
@@ -84,7 +83,7 @@ class AdminController {
     public function updateSMTPConfig() {
         $this->auth->requireAuth();
         
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = Request::jsonBody();
         
         try {
             $config = $this->emailService->saveConfig($data);
@@ -114,7 +113,7 @@ class AdminController {
     public function sendTestEmail() {
         $this->auth->requireAuth();
         
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = Request::jsonBody();
         
         if (empty($data['testEmail'])) {
             Response::error('Test email address is required');
@@ -166,8 +165,8 @@ class AdminController {
             }
         } else {
             // Update link via JSON
-            $data = json_decode(file_get_contents('php://input'), true);
-            
+            $data = Request::jsonBody();
+
             if (empty($data['link'])) {
                 Response::error('Link is required');
             }
@@ -261,7 +260,7 @@ class AdminController {
     public function updateHeroImageOrder() {
         $this->auth->requireAuth();
         
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = Request::jsonBody();
         
         if (empty($data['images']) || !is_array($data['images'])) {
             Response::error('Images array is required');
@@ -323,7 +322,7 @@ class AdminController {
         
         require_once __DIR__ . '/../utils/OneDriveHelper.php';
         
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = Request::jsonBody();
         
         try {
             $existing = $this->db->fetchOne("SELECT * FROM gallery_config ORDER BY id DESC LIMIT 1");
@@ -531,7 +530,7 @@ class AdminController {
     public function addGalleryImage() {
         $this->auth->requireAuth();
         
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = Request::jsonBody();
         
         if (empty($data['imageUrl']) || empty($data['category'])) {
             Response::error('Image URL and category are required');
@@ -579,7 +578,7 @@ class AdminController {
     public function updateGalleryImage($id) {
         $this->auth->requireAuth();
         
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = Request::jsonBody();
         
         try {
             $updates = [];
@@ -712,7 +711,7 @@ class AdminController {
     public function updateGraphApiConfig() {
         $this->auth->requireAuth();
         
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = Request::jsonBody();
         
         if (empty($data['clientId']) || empty($data['tenantId'])) {
             Response::error('Client ID and Tenant ID are required');
@@ -818,5 +817,137 @@ class AdminController {
         } catch (Exception $e) {
             Response::error('Failed to test Graph API: ' . $e->getMessage(), 500);
         }
+    }
+
+    /**
+     * GET /api/admin/mpd
+     */
+    public function getMpdAdmin() {
+        $this->auth->requireAuth();
+        try {
+            require_once __DIR__ . '/../services/MpdDisclosureService.php';
+            $disclosure = MpdDisclosureService::loadPayload($this->db);
+            $mpdUpdatedAt = MpdDisclosureService::updatedAt($this->db);
+
+            Response::success([
+                'disclosure' => $disclosure,
+                'mpdUpdatedAt' => $mpdUpdatedAt,
+            ]);
+        } catch (Exception $e) {
+            Response::error('Failed to load MPD disclosure: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * PUT /api/admin/mpd
+     * Body: merged disclosure subtree (arrays/objects replace server merge with defaults).
+     */
+    public function updateMpd() {
+        $this->auth->requireAuth();
+        try {
+            require_once __DIR__ . '/../services/MpdDisclosureService.php';
+
+            $data = Request::jsonBody();
+
+            $incoming = isset($data['disclosure']) && is_array($data['disclosure']) ? $data['disclosure'] : $data;
+
+            $disclosure = MpdDisclosureService::savePayload($this->db, $incoming);
+
+            Response::success([
+                'disclosure' => $disclosure,
+                'mpdUpdatedAt' => MpdDisclosureService::updatedAt($this->db),
+            ]);
+        } catch (Exception $e) {
+            Response::error('Failed to save MPD disclosure: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * POST /api/admin/mpd/teacher-list
+     */
+    public function uploadMpdTeacherList() {
+        $this->auth->requireAuth();
+
+        try {
+            require_once __DIR__ . '/../services/MpdDisclosureService.php';
+
+            if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+                Response::error('Teacher list file upload is required');
+                return;
+            }
+
+            $file = $_FILES['file'];
+            if ($file['size'] > 15 * 1024 * 1024) {
+                Response::error('Teacher list exceeds 15MB limit');
+                return;
+            }
+
+            $config = require __DIR__ . '/../config/app.php';
+
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mimeType = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+
+            if (!in_array($mimeType, $config['allowed_document_types'])) {
+                Response::error('Only PDF / Excel (.xlsx/.xls) / CSV uploads are allowed for teacher list');
+                return;
+            }
+
+            $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION) ?: '');
+            $allowedExtensions = ['pdf', 'xlsx', 'xls', 'csv'];
+            if (!in_array($extension, $allowedExtensions)) {
+                Response::error('Invalid file extension for teacher list');
+                return;
+            }
+
+            $filename = 'teacher-list_' . uniqid() . '_' . time() . '.' . $extension;
+            $subdirectory = 'mpd';
+            $uploadDir = rtrim($config['upload_dir'], '/') . '/' . $subdirectory;
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+
+            $destination = $uploadDir . '/' . $filename;
+
+            if (!move_uploaded_file($file['tmp_name'], $destination)) {
+                Response::error('Could not persist teacher list upload');
+                return;
+            }
+
+            $fileUrl = $config['upload_url'] . $subdirectory . '/' . $filename;
+            MpdDisclosureService::savePayload($this->db, ['teacherListUrl' => $fileUrl]);
+
+            Response::success([
+                'teacherListUrl' => $fileUrl,
+                'disclosure' => MpdDisclosureService::loadPayload($this->db),
+                'mpdUpdatedAt' => MpdDisclosureService::updatedAt($this->db),
+            ]);
+        } catch (Exception $e) {
+            Response::error('Failed teacher list upload: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * GET /api/admin/mpd/sample-teachers
+     */
+    public function downloadMpdTeacherSample() {
+        $this->auth->requireAuth();
+
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="cbse-teacher-list-sample.csv"');
+
+        $stream = fopen('php://output', 'w');
+        fprintf($stream, chr(0xEF) . chr(0xBB) . chr(0xBF));
+        fputcsv($stream, [
+            'Name',
+            'Gender',
+            'Academic qualification',
+            'Professional qualification',
+            'Designation',
+            'Teaching subject/s',
+            'Year of joining at this school',
+        ]);
+        fclose($stream);
+        exit;
     }
 }

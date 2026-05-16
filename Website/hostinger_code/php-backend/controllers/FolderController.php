@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/../services/Database.php';
 require_once __DIR__ . '/../utils/Response.php';
+require_once __DIR__ . '/../utils/Request.php';
 require_once __DIR__ . '/../middleware/Auth.php';
 require_once __DIR__ . '/../utils/OneDriveHelper.php';
 
@@ -112,8 +113,8 @@ class FolderController {
     public function createFolder() {
         $this->auth->requireAuth();
         
-        $data = json_decode(file_get_contents('php://input'), true);
-        
+        $data = Request::jsonBody();
+
         if (empty($data['name']) || empty($data['folderLink'])) {
             Response::error('Name and folder link are required');
             return;
@@ -172,7 +173,7 @@ class FolderController {
     public function updateFolder($id) {
         $this->auth->requireAuth();
         
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = Request::jsonBody();
         
         try {
             $updates = [];

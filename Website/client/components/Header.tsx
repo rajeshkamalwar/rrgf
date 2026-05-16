@@ -15,7 +15,7 @@ const Header = () => {
     { name: 'Academics', href: '/academics' },
     { name: 'Gallery', href: '/gallery' },
     { name: 'Admissions', href: '/admissions' },
-    { name: 'Mandatory Disclosure', href: '/mandatory-disclosure' },
+    { name: 'Mandatory Disclosure', href: '/mandatory-public-disclosure' },
     { name: 'Contact', href: '/contact' },
   ];
 

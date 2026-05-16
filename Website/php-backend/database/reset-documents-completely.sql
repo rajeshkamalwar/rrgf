@@ -37,9 +37,10 @@ INSERT INTO `documents` (`id`, `category`, `sno`, `document`, `information`, `li
 ('infra-6', 'infrastructure', '6', NULL, 'Building Safety certificate', '/documents/Building safty certificate.pdf', '✓ Available'),
 ('infra-7', 'infrastructure', '7', NULL, 'Fire certificate', '/documents/fire.pdf', '✓ Available'),
 ('infra-8', 'infrastructure', '8', NULL, 'INFRASTRUCTURE DETAILS DOCUMENT', '/documents/INFRASTRUCTURE.pdf', '✓ Available'),
-('infra-9', 'infrastructure', '9', NULL, 'Land certificate', '/documents/land.pdf', '✓ Available');
+('infra-9', 'infrastructure', '9', NULL, 'Land certificate', '/documents/land.pdf', '✓ Available'),
+('infra-10', 'infrastructure', '10', NULL, 'Infrastructure layout / site photograph (JPEG)', '/documents/infradoc.jpeg', '✓ Available');
 
 -- Verify:
--- SELECT COUNT(*) FROM documents; -- Should be 22
+-- SELECT COUNT(*) FROM documents; -- Should be 23
 -- SELECT category, COUNT(*) FROM documents GROUP BY category;
 -- SELECT id, category, sno, information, link, status FROM documents WHERE status = '✓ Available' ORDER BY category, CAST(sno AS UNSIGNED);

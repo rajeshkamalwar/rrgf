@@ -6,6 +6,22 @@
 class Auth {
     private $db;
     private $config;
+
+    /** Session id sent by SPA (Apache has getallheaders(); nginx/fastcgi often only sets HTTP_*). */
+    public static function getSessionHeaderId() {
+        if (function_exists('getallheaders')) {
+            $headers = getallheaders();
+            if (is_array($headers)) {
+                foreach ($headers as $name => $value) {
+                    if (strcasecmp((string) $name, 'x-session-id') === 0) {
+                        return $value !== '' ? $value : null;
+                    }
+                }
+            }
+        }
+
+        return $_SERVER['HTTP_X_SESSION_ID'] ?? null;
+    }
     
     public function __construct() {
         $this->db = Database::getInstance();
@@ -88,8 +104,7 @@ class Auth {
      * Require authentication - returns session ID or false
      */
     public function requireAuth() {
-        $headers = getallheaders();
-        $sessionId = $headers['x-session-id'] ?? $headers['X-Session-Id'] ?? null;
+        $sessionId = self::getSessionHeaderId();
         
         if (!$this->verifySession($sessionId)) {
             http_response_code(401);

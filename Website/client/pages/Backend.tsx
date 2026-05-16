@@ -26,9 +26,11 @@ import {
   ArrowDown,
   ExternalLink,
   RefreshCw,
-  Edit2
+  Edit2,
+  ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Link } from 'react-router-dom';
 
 interface SMTPConfig {
@@ -50,7 +52,60 @@ interface Document {
   status: string;
 }
 
-type View = 'smtp' | 'documents' | 'hero-images' | 'gallery' | 'graph-api';
+type View = 'smtp' | 'mpd-appendix' | 'documents' | 'hero-images' | 'gallery' | 'graph-api';
+
+interface MpdSectionRow {
+  sno: string;
+  information: string;
+  details: string;
+}
+
+interface MpdStaff {
+  pgt: number;
+  tgt: number;
+  prt: number;
+  teacherSectionRatio: string;
+  specialEducator: number;
+  counsellor: number;
+}
+
+interface MpdInfrastructure {
+  campusAreaSqMtr: number;
+  classroomCount: number;
+  classroomSizeSqMtr: number;
+  labCount: number;
+  labSizeSqMtr: number;
+  internetFacility: boolean;
+  girlsToilets: number;
+  boysToilets: number;
+  youtubeInspectionUrl: string;
+  additionalFacilities: string;
+  infrastructureDocLink: string;
+}
+
+interface MpdResultYearRow {
+  year: string;
+  registered: number;
+  passed: number;
+  remarks: string;
+}
+
+interface MpdClassOutcome {
+  doesNotOffer: boolean;
+  remark: string;
+  rows: MpdResultYearRow[];
+}
+
+interface MpdPayload {
+  sectionA: MpdSectionRow[];
+  staff: MpdStaff;
+  teacherListUrl: string;
+  infrastructure: MpdInfrastructure;
+  results: { classX: MpdClassOutcome; classXII: MpdClassOutcome };
+  legalDisclaimer: string;
+  complianceDeadline: string;
+  directiveReference: string;
+}
 
 interface HeroImage {
   id: string;
@@ -144,6 +199,12 @@ const Backend = () => {
   });
   const [graphApiClientSecret, setGraphApiClientSecret] = useState('');
 
+  /** CBSE Appendix-IX snapshot (persisted via /api/admin/mpd) */
+  const [mpdDraft, setMpdDraft] = useState<MpdPayload | null>(null);
+  const [mpdUpdatedAt, setMpdUpdatedAt] = useState<string | null>(null);
+  const [mpdSaving, setMpdSaving] = useState(false);
+  const [uploadingTeacherList, setUploadingTeacherList] = useState(false);
+
   // Check if already authenticated
   useEffect(() => {
     const sessionId = localStorage.getItem('adminSessionId');
@@ -179,6 +240,12 @@ const Backend = () => {
   useEffect(() => {
     if (isAuthenticated && currentView === 'graph-api') {
       loadGraphApiConfig();
+    }
+  }, [isAuthenticated, currentView]);
+
+  useEffect(() => {
+    if (isAuthenticated && currentView === 'mpd-appendix') {
+      loadMpdAdminPayload();
     }
   }, [isAuthenticated, currentView]);
 
@@ -297,6 +364,170 @@ const Backend = () => {
       console.error('Error loading documents:', error);
       toast.error('Failed to load documents');
     }
+  };
+
+  const normalizeMpdPayload = (incoming: Partial<MpdPayload>): MpdPayload => {
+    const empty: MpdPayload = {
+      sectionA: [],
+      staff: { pgt: 0, tgt: 6, prt: 8, teacherSectionRatio: '1:1.5', specialEducator: 1, counsellor: 1 },
+      teacherListUrl: '',
+      infrastructure: {
+        campusAreaSqMtr: 6070.28,
+        classroomCount: 22,
+        classroomSizeSqMtr: 47,
+        labCount: 6,
+        labSizeSqMtr: 56,
+        internetFacility: true,
+        girlsToilets: 14,
+        boysToilets: 16,
+        youtubeInspectionUrl: '',
+        additionalFacilities: '',
+        infrastructureDocLink: '/documents/infradoc.jpeg',
+      },
+      results: {
+        classX: {
+          doesNotOffer: true,
+          remark: 'NA',
+          rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
+        },
+        classXII: {
+          doesNotOffer: true,
+          remark: 'NA',
+          rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
+        },
+      },
+      legalDisclaimer:
+        'Note: THE SCHOOL NEEDS TO UPLOAD SELF-ATTESTED COPIES OF ABOVE LISTED DOCUMENTS BY CHAIRMAN/MANAGER/SECRETARY AND PRINCIPAL. IN CASE IT IS NOTICED AT LATER STAGE THAT UPLOADED DOCUMENTS ARE NOT GENUINE THEN SCHOOL SHALL BE LIABLE FOR ACTION AS PER NORMS.',
+      complianceDeadline: '2026-05-21',
+      directiveReference: 'CBSE/MPD/AFF./2026 dated 06.05.2026',
+    };
+    const rawR = (incoming.results || {}) as Partial<MpdPayload['results']> &
+      Record<'class XII' | 'classXII' | 'classX', MpdClassOutcome | undefined>;
+
+    const cxiiSrc =
+      rawR.classXII ||
+      rawR['class XII'];
+    const classXIIOut = cxiiSrc ? { ...empty.results.classXII, ...cxiiSrc } : empty.results.classXII;
+
+    return {
+      sectionA: incoming.sectionA?.length ? incoming.sectionA : empty.sectionA,
+      staff: { ...empty.staff, ...incoming.staff },
+      teacherListUrl: incoming.teacherListUrl ?? '',
+      infrastructure: { ...empty.infrastructure, ...incoming.infrastructure },
+      results: {
+        classX: { ...empty.results.classX, ...(rawR.classX || {}) },
+        classXII: classXIIOut,
+      },
+      legalDisclaimer: incoming.legalDisclaimer || empty.legalDisclaimer,
+      complianceDeadline: incoming.complianceDeadline || empty.complianceDeadline,
+      directiveReference: incoming.directiveReference || empty.directiveReference,
+    };
+  };
+
+  const loadMpdAdminPayload = async () => {
+    try {
+      const sessionId = localStorage.getItem('adminSessionId');
+      if (!sessionId) return;
+      const response = await fetch('/api/admin/mpd', {
+        headers: { 'x-session-id': sessionId },
+      });
+      const data = await response.json();
+      if (data.success && data.disclosure) {
+        setMpdDraft(normalizeMpdPayload(data.disclosure));
+        setMpdUpdatedAt(data.mpdUpdatedAt ?? null);
+      } else if (!response.ok) {
+        toast.error(data.error || 'Failed to load MPD data — run mpd migration on database');
+      }
+    } catch {
+      toast.error('Failed to load Appendix-IX disclosure');
+    }
+  };
+
+  const saveMpdAdminPayload = async () => {
+    if (!mpdDraft) return;
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) {
+      toast.error('Session expired');
+      return;
+    }
+    setMpdSaving(true);
+    try {
+      const response = await fetch('/api/admin/mpd', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-id': sessionId,
+        },
+        body: JSON.stringify({ disclosure: mpdDraft }),
+      });
+      const data = await response.json();
+      if (data.success && data.disclosure) {
+        setMpdDraft(normalizeMpdPayload(data.disclosure));
+        setMpdUpdatedAt(data.mpdUpdatedAt ?? null);
+        toast.success('MPD Appendix-IX data saved');
+      } else {
+        toast.error(data.error || 'Save failed');
+      }
+    } catch {
+      toast.error('Save failed');
+    } finally {
+      setMpdSaving(false);
+    }
+  };
+
+  const downloadTeacherSampleCsv = async () => {
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) return;
+    try {
+      const response = await fetch('/api/admin/mpd/sample-teachers', {
+        headers: { 'x-session-id': sessionId },
+      });
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'cbse-teacher-list-sample.csv';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Could not download sample CSV');
+    }
+  };
+
+  const handleTeacherListUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) return;
+    setUploadingTeacherList(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const response = await fetch('/api/admin/mpd/teacher-list', {
+        method: 'POST',
+        headers: { 'x-session-id': sessionId },
+        body: fd,
+      });
+      const data = await response.json();
+      if (data.success && data.disclosure) {
+        setMpdDraft(normalizeMpdPayload(data.disclosure));
+        setMpdUpdatedAt(data.mpdUpdatedAt ?? null);
+        toast.success('Teacher list uploaded');
+      } else {
+        toast.error(data.error || 'Upload failed');
+      }
+    } catch {
+      toast.error('Upload failed');
+    } finally {
+      setUploadingTeacherList(false);
+    }
+  };
+
+  const appendixDaysRemaining = (isoDate: string) => {
+    const end = new Date(isoDate + 'T23:59:59');
+    const now = new Date();
+    return Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   };
 
   const loadHeroImages = async () => {
@@ -1446,6 +1677,395 @@ const Backend = () => {
       );
     }
 
+    if (currentView === 'mpd-appendix') {
+      if (!mpdDraft) {
+        return (
+          <div className="flex justify-center py-24">
+            <Loader2 className="h-8 w-8 animate-spin text-school-primary" />
+          </div>
+        );
+      }
+      const dl = appendixDaysRemaining(mpdDraft.complianceDeadline);
+
+      const updateOutcomeRow =
+        (
+          key: 'classX' | 'classXII',
+          field: keyof MpdResultYearRow,
+          value: string | number,
+        ) => {
+          setMpdDraft((prev) => {
+            if (!prev) return prev;
+            const outcome = prev.results[key];
+            const rows = [...outcome.rows];
+            rows[0] = { ...rows[0], [field]: value };
+            return {
+              ...prev,
+              results: {
+                ...prev.results,
+                [key]: { ...outcome, rows },
+              },
+            };
+          });
+        };
+
+      return (
+        <div className="space-y-6">
+          <Alert variant="default" className="border-red-200 bg-red-50 text-school-secondary">
+            <AlertDescription className="space-y-1">
+              <div className="font-semibold">CBSE MPD restoration — Appendix-IX</div>
+              <div className="text-sm">
+                Target deadline:{' '}
+                <span className="font-mono">{mpdDraft.complianceDeadline}</span> (
+                {dl >= 0 ? `${dl} day(s) remaining` : `${Math.abs(dl)} day(s) past — update urgently`}). Submit mail
+                pack to{' '}
+                <a href="mailto:cbse.aff@nic.in" className="underline font-medium">
+                  cbse.aff@nic.in
+                </a>
+              </div>
+            </AlertDescription>
+          </Alert>
+
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <ClipboardList className="h-5 w-5" /> Appendix‑IX structured data
+                </CardTitle>
+                <CardDescription>
+                  Public page loads from /api/mpd · Last saved:{' '}
+                  {mpdUpdatedAt ? new Date(mpdUpdatedAt).toLocaleString('en-IN') : '—'} · Matches hierarchy A→E on
+                  the site
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/mandatory-public-disclosure" target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="mr-2 h-4 w-4" /> Preview public URL
+                  </Link>
+                </Button>
+                <Button onClick={saveMpdAdminPayload} disabled={mpdSaving}>
+                  {mpdSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" /> SAVE DATA
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Section A — General information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {mpdDraft.sectionA.map((row, idx) => (
+                <div key={row.sno} className="grid gap-2 md:grid-cols-3 md:items-center border rounded-lg p-3">
+                  <div className="text-xs text-muted-foreground">{row.information}</div>
+                  <div className="md:col-span-2">
+                    <Input
+                      value={row.details}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMpdDraft((p) =>
+                          !p
+                            ? p
+                            : {
+                                ...p,
+                                sectionA: p.sectionA.map((r, i) =>
+                                  i === idx ? { ...r, details: v } : r,
+                                ),
+                              },
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Section C — Staff</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {(
+                [['pgt', 'PGT'], ['tgt', 'TGT'], ['prt', 'PRT'], ['specialEducator', 'Special educator'], ['counsellor', 'Counsellor']] as const
+              ).map(([field, label]) => (
+                <div key={field} className="space-y-1">
+                  <Label>{label}</Label>
+                  <Input
+                    type="number"
+                    value={Number(mpdDraft.staff[field as keyof MpdStaff])}
+                    onChange={(e) =>
+                      setMpdDraft((p) =>
+                        !p
+                          ? p
+                          : {
+                              ...p,
+                              staff: {
+                                ...p.staff,
+                                [field]: parseInt(e.target.value, 10) || 0,
+                              },
+                            },
+                      )
+                    }
+                  />
+                </div>
+              ))}
+              <div className="space-y-1 sm:col-span-2 lg:col-span-2">
+                <Label>Teachers : Section ratio</Label>
+                <Input
+                  value={mpdDraft.staff.teacherSectionRatio}
+                  onChange={(e) =>
+                    setMpdDraft((p) => (!p ? p : { ...p, staff: { ...p.staff, teacherSectionRatio: e.target.value } }))
+                  }
+                  placeholder="1:1.5"
+                />
+              </div>
+              <div className="space-y-2 rounded-lg border p-4 sm:col-span-2 lg:col-span-3">
+                <div className="font-medium">Teacher list upload (Appendix‑IX field 8)</div>
+                <p className="text-sm text-muted-foreground">
+                  Current file:{' '}
+                  <span className="font-mono text-xs">{mpdDraft.teacherListUrl || 'Not uploaded'}</span>
+                </p>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Button variant="outline" size="sm" type="button" onClick={downloadTeacherSampleCsv}>
+                    Download sample CSV
+                  </Button>
+                  <Input type="file" accept=".pdf,.csv,.xlsx,.xls" className="max-w-xs" onChange={handleTeacherListUpload} disabled={uploadingTeacherList} />
+                  {uploadingTeacherList ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Section D — Infrastructure</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {(
+                [
+                  ['campusAreaSqMtr', 'Campus area (sq mtr)'],
+                  ['classroomCount', 'No. classrooms'],
+                  ['classroomSizeSqMtr', 'Size per classroom (sq mtr)'],
+                  ['labCount', 'No. labs'],
+                  ['labSizeSqMtr', 'Size per lab (sq mtr)'],
+                  ['girlsToilets', 'Girls toilets'],
+                  ['boysToilets', 'Boys toilets'],
+                ] as const
+              ).map(([k, label]) => (
+                <div key={k} className="space-y-1">
+                  <Label>{label}</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={mpdDraft.infrastructure[k]}
+                    onChange={(e) =>
+                      setMpdDraft((p) =>
+                        !p
+                          ? p
+                          : {
+                              ...p,
+                              infrastructure: {
+                                ...p.infrastructure,
+                                [k]: parseFloat(e.target.value) || 0,
+                              },
+                            },
+                      )
+                    }
+                  />
+                </div>
+              ))}
+              <div className="flex items-center gap-2 sm:col-span-3">
+                <Checkbox
+                  id="inet"
+                  checked={mpdDraft.infrastructure.internetFacility}
+                  onCheckedChange={(checked) =>
+                    setMpdDraft((p) =>
+                      !p
+                        ? p
+                        : {
+                            ...p,
+                            infrastructure: {
+                              ...p.infrastructure,
+                              internetFacility: Boolean(checked),
+                            },
+                          },
+                    )
+                  }
+                />
+                <Label htmlFor="inet">Internet facility</Label>
+              </div>
+              <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+                <Label>YouTube inspection video (full https URL — fixes bad wwwyoutubecom paste)</Label>
+                <Input
+                  value={mpdDraft.infrastructure.youtubeInspectionUrl}
+                  onChange={(e) =>
+                    setMpdDraft((p) =>
+                      !p
+                        ? p
+                        : {
+                            ...p,
+                            infrastructure: {
+                              ...p.infrastructure,
+                              youtubeInspectionUrl: e.target.value,
+                            },
+                          },
+                    )
+                  }
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-3">
+                <Label>Additional facilities (text)</Label>
+                <Input
+                  value={mpdDraft.infrastructure.additionalFacilities}
+                  onChange={(e) =>
+                    setMpdDraft((p) =>
+                      !p
+                        ? p
+                        : {
+                            ...p,
+                            infrastructure: {
+                              ...p.infrastructure,
+                              additionalFacilities: e.target.value,
+                            },
+                          },
+                    )
+                  }
+                />
+              </div>
+              <div className="space-y-1 sm:col-span-3">
+                <Label>Infrastructure supporting document URL</Label>
+                <Input
+                  value={mpdDraft.infrastructure.infrastructureDocLink}
+                  onChange={(e) =>
+                    setMpdDraft((p) =>
+                      !p
+                        ? p
+                        : {
+                            ...p,
+                            infrastructure: {
+                              ...p.infrastructure,
+                              infrastructureDocLink: e.target.value,
+                            },
+                          },
+                    )
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Section E — Results (Classes X / XII)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {(['classX', 'classXII'] as const).map((gk) => {
+                const outcome = mpdDraft.results[gk];
+                const title = gk === 'classX' ? 'Class X' : 'Class XII';
+                return (
+                  <div key={gk} className="rounded-lg border p-4 space-y-4">
+                    <div className="flex flex-wrap gap-4 items-center">
+                      <div className="font-semibold">{title}</div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`dnf-${gk}`}
+                          checked={outcome.doesNotOffer}
+                          onCheckedChange={(checked) =>
+                            setMpdDraft((p) =>
+                              !p
+                                ? p
+                                : {
+                                    ...p,
+                                    results: {
+                                      ...p.results,
+                                      [gk]: { ...outcome, doesNotOffer: Boolean(checked) },
+                                    },
+                                  },
+                            )
+                          }
+                        />
+                        <Label htmlFor={`dnf-${gk}`}>School does not offer / no data yet (hides placeholders)</Label>
+                      </div>
+                    </div>
+                    {!outcome.doesNotOffer ? (
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="space-y-1">
+                          <Label>Year (4 digits)</Label>
+                          <Input
+                            value={outcome.rows[0]?.year ?? ''}
+                            onChange={(e) => updateOutcomeRow(gk, 'year', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Registered</Label>
+                          <Input
+                            type="number"
+                            value={outcome.rows[0]?.registered ?? 0}
+                            onChange={(e) =>
+                              updateOutcomeRow(gk, 'registered', parseInt(e.target.value, 10) || 0)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Passed</Label>
+                          <Input
+                            type="number"
+                            value={outcome.rows[0]?.passed ?? 0}
+                            onChange={(e) => updateOutcomeRow(gk, 'passed', parseInt(e.target.value, 10) || 0)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Remarks</Label>
+                          <Input
+                            value={outcome.rows[0]?.remarks ?? ''}
+                            onChange={(e) => updateOutcomeRow(gk, 'remarks', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <div className="space-y-1">
+                <Label>Legal disclaimer footer (see CBSE Annex note)</Label>
+                <textarea
+                  className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]"
+                  value={mpdDraft.legalDisclaimer}
+                  onChange={(e) => setMpdDraft((p) => (!p ? p : { ...p, legalDisclaimer: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label>Compliance deadline (YYYY-MM-DD)</Label>
+                  <Input
+                    value={mpdDraft.complianceDeadline}
+                    onChange={(e) => setMpdDraft((p) => (!p ? p : { ...p, complianceDeadline: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Directive reference (display)</Label>
+                  <Input
+                    value={mpdDraft.directiveReference}
+                    onChange={(e) => setMpdDraft((p) => (!p ? p : { ...p, directiveReference: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
     if (currentView === 'documents') {
       const documentsByCategory = {
         documents: documents.filter(d => d.category === 'documents'),
@@ -2510,6 +3130,14 @@ const Backend = () => {
             SMTP Settings
           </Button>
           <Button
+            variant={currentView === 'mpd-appendix' ? 'default' : 'ghost'}
+            className="w-full justify-start"
+            onClick={() => setCurrentView('mpd-appendix')}
+          >
+            <ClipboardList className="mr-2 h-4 w-4" />
+            Appendix‑IX MPD Data
+          </Button>
+          <Button
             variant={currentView === 'documents' ? 'default' : 'ghost'}
             className="w-full justify-start"
             onClick={() => setCurrentView('documents')}
@@ -2566,20 +3194,34 @@ const Backend = () => {
             )}
             <div>
               <h1 className="text-2xl font-bold text-school-secondary">
-                {currentView === 'smtp' ? 'SMTP Configuration' : 
-                 currentView === 'documents' ? 'Document Management' : 
-                 currentView === 'hero-images' ? 'Hero Images Management' :
-                 currentView === 'gallery' ? 'Gallery Management' :
-                 currentView === 'graph-api' ? 'Graph API Configuration' :
-                 'Admin Panel'}
+                {currentView === 'smtp'
+                  ? 'SMTP Configuration'
+                  : currentView === 'mpd-appendix'
+                    ? 'CBSE Appendix‑IX MPD'
+                    : currentView === 'documents'
+                      ? 'Document Management'
+                      : currentView === 'hero-images'
+                        ? 'Hero Images Management'
+                        : currentView === 'gallery'
+                          ? 'Gallery Management'
+                          : currentView === 'graph-api'
+                            ? 'Graph API Configuration'
+                            : 'Admin Panel'}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {currentView === 'smtp' ? 'Manage email settings' : 
-                 currentView === 'documents' ? 'Manage mandatory disclosure documents' :
-                 currentView === 'hero-images' ? 'Manage hero slider images for the home page' :
-                 currentView === 'gallery' ? 'Manage gallery images from OneDrive' :
-                 currentView === 'graph-api' ? 'Configure Microsoft Graph API for automatic image fetching' :
-                 'Admin Panel'}
+                {currentView === 'smtp'
+                  ? 'Manage email settings'
+                  : currentView === 'mpd-appendix'
+                    ? 'General info, staff, infrastructure, Class X/XII results — drives /mandatory-public-disclosure'
+                    : currentView === 'documents'
+                      ? 'Upload PDF rows for Annex B supporting documents'
+                      : currentView === 'hero-images'
+                        ? 'Manage hero slider images for the home page'
+                        : currentView === 'gallery'
+                          ? 'Manage gallery images from OneDrive'
+                          : currentView === 'graph-api'
+                            ? 'Configure Microsoft Graph API for automatic image fetching'
+                            : 'Admin Panel'}
               </p>
             </div>
           </div>

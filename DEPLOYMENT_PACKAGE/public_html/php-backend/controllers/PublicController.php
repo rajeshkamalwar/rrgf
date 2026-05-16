@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/../services/Database.php';
 require_once __DIR__ . '/../utils/Response.php';
+require_once __DIR__ . '/../utils/Request.php';
 require_once __DIR__ . '/../services/EmailService.php';
 
 class PublicController {
@@ -20,8 +21,8 @@ class PublicController {
      * POST /api/enquiry
      */
     public function submitEnquiry() {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
+        $data = Request::jsonBody();
+
         // Validate required fields
         if (empty($data['name']) || empty($data['phone'])) {
             Response::error('Name and phone are required');
@@ -65,8 +66,8 @@ class PublicController {
      * POST /api/contact
      */
     public function submitContact() {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
+        $data = Request::jsonBody();
+
         if (empty($data['name']) || empty($data['email']) || empty($data['subject']) || empty($data['description'])) {
             Response::error('All fields are required');
         }
@@ -99,8 +100,8 @@ class PublicController {
      * POST /api/admissions
      */
     public function submitAdmission() {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
+        $data = Request::jsonBody();
+
         // Validate required fields
         $required = ['studentName', 'dateOfBirth', 'gender', 'classSeeking', 'parentName', 
                      'phone', 'email', 'address', 'emergencyContactName', 'emergencyContactPhone'];
@@ -159,8 +160,8 @@ class PublicController {
      * POST /api/visit-schedule
      */
     public function submitVisitSchedule() {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
+        $data = Request::jsonBody();
+
         $required = ['name', 'email', 'phone', 'preferredDate', 'preferredTime', 'numberOfVisitors', 'purpose'];
         foreach ($required as $field) {
             if (empty($data[$field])) {
@@ -212,6 +213,29 @@ class PublicController {
             Response::success(['documents' => $documents]);
         } catch (Exception $e) {
             Response::error('Failed to fetch documents: ' . $e->getMessage(), 500);
+        }
+    }
+    
+    /**
+     * GET /api/mpd
+     * Full mandatory public disclosure bundle (Appendix‑IX structured fields + uploaded documents lists).
+     */
+    public function getMpdBundle() {
+        try {
+            require_once __DIR__ . '/../services/MpdDisclosureService.php';
+            $documents = $this->db->fetchAll("SELECT * FROM documents ORDER BY category, CAST(sno AS UNSIGNED)");
+            $disclosure = MpdDisclosureService::loadPayload($this->db);
+            $mpdUpdatedAt = MpdDisclosureService::updatedAt($this->db);
+
+            Response::success([
+                'documents' => $documents,
+                'disclosure' => $disclosure,
+                'mpdUpdatedAt' => $mpdUpdatedAt,
+                'canonicalPath' => '/mandatory-public-disclosure',
+                'alternatePaths' => ['/mandatory-disclosure'],
+            ]);
+        } catch (Exception $e) {
+            Response::error('Failed to load disclosure: ' . $e->getMessage(), 500);
         }
     }
     

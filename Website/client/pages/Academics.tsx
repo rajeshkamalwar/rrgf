@@ -137,7 +137,7 @@ const Academics = () => {
                             <div key={stream}>
                               <p className="font-medium text-school-primary text-sm">{stream} Stream:</p>
                               <div className="flex flex-wrap gap-2 mt-1">
-                                {subjects.map((subject, idx) => (
+                                {(subjects as string[]).map((subject, idx) => (
                                   <Badge key={idx} variant="secondary" className="text-xs">
                                     {subject}
                                   </Badge>

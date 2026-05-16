@@ -2,7 +2,7 @@
 /**
  * Image Proxy for Google Drive Images
  * Proxies Google Drive images to avoid CORS issues
- * 
+ *
  * Usage: /api/image-proxy.php?url=ENCODED_GOOGLE_DRIVE_URL
  */
 
@@ -17,10 +17,33 @@ if (empty($imageUrl)) {
 }
 
 // Decode the URL
-$imageUrl = urldecode($imageUrl);
+$imageUrl = urldecode($_GET['url']);
 
-// Security: Only allow Google Drive URLs
-if (strpos($imageUrl, 'drive.google.com') === false && strpos($imageUrl, 'googleusercontent.com') === false) {
+/**
+ * Allowed hosts only (substring checks are unsafe: e.g. https://evil.com/x?drive.google.com=y).
+ */
+function imageProxyAllowedHost(string $host): bool {
+    $host = strtolower($host);
+
+    return $host === 'drive.google.com'
+        /** Thumbnails served from Google CDN */
+        || preg_match('/^(?:[a-z0-9-]+\.)*googleusercontent\.com$/', $host);
+}
+
+$parsed = parse_url($imageUrl);
+if (!is_array($parsed) || empty($parsed['scheme']) || empty($parsed['host'])) {
+    http_response_code(400);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Invalid URL']);
+    exit;
+}
+if (strtolower($parsed['scheme']) !== 'https') {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Only HTTPS image URLs are allowed']);
+    exit;
+}
+if (!imageProxyAllowedHost($parsed['host'])) {
     http_response_code(403);
     header('Content-Type: application/json');
     echo json_encode(['error' => 'Only Google Drive URLs are allowed']);
@@ -31,7 +54,12 @@ if (strpos($imageUrl, 'drive.google.com') === false && strpos($imageUrl, 'google
 $ch = curl_init($imageUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+if (defined('CURLPROTO_HTTPS')) {
+    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+    curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
+}
 curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 

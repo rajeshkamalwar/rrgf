@@ -12,5 +12,10 @@ return [
     'upload_url' => '/uploads/',
     'max_file_size' => 5 * 1024 * 1024, // 5MB
     'allowed_image_types' => ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
-    'allowed_document_types' => ['application/pdf'],
+    'allowed_document_types' => [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'text/csv',
+    ],
 ];
