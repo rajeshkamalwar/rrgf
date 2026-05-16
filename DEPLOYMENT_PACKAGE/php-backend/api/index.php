@@ -24,10 +24,13 @@ Response::enableCORS();
 // Get request method and URI
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Preserved by root .htaccess when routing through /api/index.php (Apache/LiteSpeed)
-$envUri = getenv('RRGF_API_URI') ?: getenv('REDIRECT_RRGF_API_URI') ?: false;
+// LiteSpeed sets E= vars directly in $_SERVER (no REDIRECT_ prefix).
+// Apache sets them as REDIRECT_VAR. getenv() may miss both on FastCGI.
+$envUri = $_SERVER['RRGF_API_URI']
+    ?? $_SERVER['REDIRECT_RRGF_API_URI']
+    ?? (getenv('RRGF_API_URI') ?: getenv('REDIRECT_RRGF_API_URI') ?: null);
 
-$uri = is_string($envUri) && $envUri !== ''
+$uri = ($envUri !== null && $envUri !== '')
     ? $envUri
     : ($_SERVER['REQUEST_URI'] ?? '/');
 
