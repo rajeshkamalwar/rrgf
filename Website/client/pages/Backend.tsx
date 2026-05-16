@@ -1791,7 +1791,7 @@ const Backend = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Section C — Staff</CardTitle>
+              <CardTitle>Section D — Staff (Teaching)</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {(
@@ -1847,7 +1847,7 @@ const Backend = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Section D — Infrastructure</CardTitle>
+              <CardTitle>Section E — School Infrastructure</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {(
@@ -1966,7 +1966,7 @@ const Backend = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Section E — Results (Classes X / XII)</CardTitle>
+              <CardTitle>Section C — Result and Academics (Classes X / XII)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-8">
               {(['classX', 'classXII'] as const).map((gk) => {
