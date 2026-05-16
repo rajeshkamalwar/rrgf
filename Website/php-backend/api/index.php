@@ -24,15 +24,16 @@ Response::enableCORS();
 // Get request method and URI
 $method = $_SERVER['REQUEST_METHOD'];
 
-// LiteSpeed sets E= vars directly in $_SERVER (no REDIRECT_ prefix).
-// Apache sets them as REDIRECT_VAR. getenv() may miss both on FastCGI.
+// _rrgf_path is injected by the .htaccess RewriteRule as a query param — LiteSpeed-safe.
+// Falls back to E= env vars (Apache) then REQUEST_URI.
+$qPath  = isset($_GET['_rrgf_path']) && $_GET['_rrgf_path'] !== '' ? $_GET['_rrgf_path'] : null;
 $envUri = $_SERVER['RRGF_API_URI']
     ?? $_SERVER['REDIRECT_RRGF_API_URI']
     ?? (getenv('RRGF_API_URI') ?: getenv('REDIRECT_RRGF_API_URI') ?: null);
 
-$uri = ($envUri !== null && $envUri !== '')
-    ? $envUri
-    : ($_SERVER['REQUEST_URI'] ?? '/');
+$uri = $qPath
+    ?? ($envUri !== null && $envUri !== '' ? $envUri : null)
+    ?? ($_SERVER['REQUEST_URI'] ?? '/');
 
 $path = parse_url($uri, PHP_URL_PATH) ?: '';
 
@@ -59,6 +60,19 @@ try {
     $publicController = new PublicController();
     $adminController = new AdminController();
     
+    // Temporary diagnostic — remove after confirming routing works
+    if ($path === 'debug-uri') {
+        echo json_encode([
+            'path'               => $path,
+            'envUri'             => $envUri,
+            'REQUEST_URI'        => $_SERVER['REQUEST_URI'] ?? null,
+            'RRGF_API_URI'       => $_SERVER['RRGF_API_URI'] ?? null,
+            'REDIRECT_RRGF_API_URI' => $_SERVER['REDIRECT_RRGF_API_URI'] ?? null,
+            'getenv_RRGF'        => getenv('RRGF_API_URI') ?: null,
+        ]);
+        exit;
+    }
+
     // Public routes
     if ($path === 'enquiry' && $method === 'POST') {
         $publicController->submitEnquiry();

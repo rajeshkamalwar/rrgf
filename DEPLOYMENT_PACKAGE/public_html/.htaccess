@@ -5,9 +5,9 @@
   RewriteEngine On
   RewriteBase /
   
-  # API → always hit this real PHP file (LiteSpeed often won't run nested index.php for /api/foo)
+  # API → pass original path as query param (LiteSpeed-safe; $_SERVER E= vars are unreliable)
   RewriteCond %{REQUEST_URI} ^/?api(/|$) [NC]
-  RewriteRule .* api/index.php [L,QSA,E=RRGF_API_URI:%{REQUEST_URI}]
+  RewriteRule ^api/(.*)$ api/index.php?_rrgf_path=/api/$1 [L,QSA]
   
   # Serve static files directly (don't route to index.html)
   RewriteCond %{REQUEST_FILENAME} -f
