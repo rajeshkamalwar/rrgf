@@ -5,19 +5,19 @@
   RewriteEngine On
   RewriteBase /
   
-  # Handle API requests - proxy to PHP backend (inside public_html)
-  RewriteCond %{REQUEST_URI} ^/api/(.*)$
-  RewriteRule ^api/(.*)$ /php-backend/api/index.php [L,QSA]
+  # API → always hit this real PHP file (LiteSpeed often won't run nested index.php for /api/foo)
+  RewriteCond %{REQUEST_URI} ^/?api(/|$) [NC]
+  RewriteRule .* api/index.php [L,QSA,E=RRGF_API_URI:%{REQUEST_URI}]
   
   # Serve static files directly (don't route to index.html)
   RewriteCond %{REQUEST_FILENAME} -f
   RewriteRule . - [L]
   
   # Handle React Router - serve index.html for all non-file/non-directory requests
-  # Exclude API, assets, and all file extensions
+  # Exclude API, assets, and all file extensions (some hosts omit leading slash in REQUEST_URI)
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteCond %{REQUEST_URI} !^/api/
+  RewriteCond %{REQUEST_URI} !^/?api(/|$) [NC]
   RewriteCond %{REQUEST_URI} !^/assets/
   RewriteCond %{REQUEST_URI} !\.(css|js|jpg|jpeg|png|gif|svg|ico|pdf|woff|woff2|ttf|eot|webp)$ [NC]
   RewriteRule . /index.html [L]

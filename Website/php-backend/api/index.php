@@ -23,8 +23,23 @@ Response::enableCORS();
 
 // Get request method and URI
 $method = $_SERVER['REQUEST_METHOD'];
-$uri = $_SERVER['REQUEST_URI'];
-$path = parse_url($uri, PHP_URL_PATH);
+
+// Preserved by root .htaccess when routing through /api/index.php (Apache/LiteSpeed)
+$envUri = getenv('RRGF_API_URI') ?: getenv('REDIRECT_RRGF_API_URI') ?: false;
+
+$uri = is_string($envUri) && $envUri !== ''
+    ? $envUri
+    : ($_SERVER['REQUEST_URI'] ?? '/');
+
+$path = parse_url($uri, PHP_URL_PATH) ?: '';
+
+// Direct script URL (.../php-backend/api/…) — normalize so routing matches cleaned /api/… style
+$pba = '/php-backend/api';
+if (strpos($path, $pba) === 0) {
+    $tail = substr($path, strlen($pba));
+    $tail = trim((string) $tail, '/');
+    $path = '/api' . ($tail !== '' ? '/' . $tail : '');
+}
 
 // Remove base path if needed (e.g., if in subdirectory)
 $basePath = '/api';

@@ -1,60 +1,49 @@
-# Apache Configuration for Hostinger Shared Hosting
-# Place this .htaccess in your public_html or root directory
+# Backend-only Apache / LiteSpeed config (Hostinger shared hosting).
+# ⚠️ Do NOT rewrite /api/* here — routing is handled by the parent ../.htaccess
+# pointing to php-backend/api/index.php.
 
-# Enable rewrite engine
 <IfModule mod_rewrite.c>
-    RewriteEngine On
-    
-    # Force HTTPS (uncomment if you have SSL)
-    # RewriteCond %{HTTPS} off
-    # RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
-    
-    # API Routes - Route /api/* to api/index.php
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^api/(.*)$ api/index.php [QSA,L]
-    
-    # SPA Routing - Serve index.html for all non-file requests
-    # This allows React Router to handle client-side routing
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_URI} !^/api/
-    RewriteRule ^ index.html [L]
+    RewriteEngine Off
 </IfModule>
 
-# Security headers
 <IfModule mod_headers.c>
-    # Prevent clickjacking
     Header set X-Frame-Options "SAMEORIGIN"
-    
-    # XSS Protection
     Header set X-XSS-Protection "1; mode=block"
-    
-    # Prevent MIME type sniffing
     Header set X-Content-Type-Options "nosniff"
-    
-    # Referrer Policy
     Header set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
 
-# PHP settings (if allowed by hosting)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 15M
+    php_value post_max_size 15M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+</IfModule>
 <IfModule mod_php7.c>
-    php_value upload_max_filesize 10M
-    php_value post_max_size 10M
+    php_value upload_max_filesize 15M
+    php_value post_max_size 15M
+    php_value max_execution_time 300
+    php_value max_input_time 300
+</IfModule>
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 15M
+    php_value post_max_size 15M
     php_value max_execution_time 300
     php_value max_input_time 300
 </IfModule>
 
-# Prevent directory listing
 Options -Indexes
 
-# Protect sensitive files
 <FilesMatch "\.(env|log|ini|conf|sql)$">
-    Order allow,deny
-    Deny from all
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
 </FilesMatch>
 
-# Cache static assets
 <IfModule mod_expires.c>
     ExpiresActive On
     ExpiresByType image/jpeg "access plus 1 year"
@@ -62,11 +51,8 @@ Options -Indexes
     ExpiresByType image/webp "access plus 1 year"
     ExpiresByType image/gif "access plus 1 year"
     ExpiresByType application/pdf "access plus 1 month"
-    ExpiresByType text/css "access plus 1 month"
-    ExpiresByType application/javascript "access plus 1 month"
 </IfModule>
 
-# Gzip compression
 <IfModule mod_deflate.c>
     AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
 </IfModule>
