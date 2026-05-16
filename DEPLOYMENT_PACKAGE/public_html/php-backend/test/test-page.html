@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHP Backend API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .info {
+            background: #d1ecf1;
+            border-left-color: #17a2b8;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 PHP Backend API Test</h1>
+    
+    <div class="info">
+        <strong>Server:</strong> <span id="serverUrl">http://localhost:8000</span><br>
+        <strong>Status:</strong> <span id="serverStatus">Checking...</span>
+    </div>
+
+    <div class="container">
+        <h2>Public Endpoints</h2>
+        <button onclick="testEndpoint('GET', '/api/documents')">Test GET /api/documents</button>
+        <button onclick="testEndpoint('GET', '/api/hero-images')">Test GET /api/hero-images</button>
+        <button onclick="testEndpoint('GET', '/api/gallery')">Test GET /api/gallery</button>
+        <div id="publicResult" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>Form Submissions</h2>
+        <button onclick="testEnquiry()">Test POST /api/enquiry</button>
+        <button onclick="testContact()">Test POST /api/contact</button>
+        <div id="formResult" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>Admin Endpoints</h2>
+        <input type="text" id="adminUsername" placeholder="Username" value="admin" style="padding: 8px; margin: 5px;">
+        <input type="password" id="adminPassword" placeholder="Password" value="admin123" style="padding: 8px; margin: 5px;">
+        <button onclick="testAdminLogin()">Test Admin Login</button>
+        <button onclick="testCheckAuth()" id="checkAuthBtn" disabled>Test Check Auth</button>
+        <div id="adminResult" class="result" style="display:none;"></div>
+    </div>
+
+    <script>
+        const baseUrl = 'http://localhost:8000';
+        let sessionId = null;
+
+        // Check server status
+        fetch(baseUrl + '/api/documents')
+            .then(() => {
+                document.getElementById('serverStatus').textContent = '✅ Online';
+                document.getElementById('serverStatus').style.color = 'green';
+            })
+            .catch(() => {
+                document.getElementById('serverStatus').textContent = '❌ Offline - Start server: php -S localhost:8000';
+                document.getElementById('serverStatus').style.color = 'red';
+            });
+
+        function testEndpoint(method, endpoint) {
+            const resultDiv = document.getElementById('publicResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Loading...';
+            resultDiv.className = 'result';
+
+            fetch(baseUrl + endpoint, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                resultDiv.className = data.success ? 'result success' : 'result error';
+            })
+            .catch(error => {
+                resultDiv.textContent = 'Error: ' + error.message;
+                resultDiv.className = 'result error';
+            });
+        }
+
+        function testEnquiry() {
+            const resultDiv = document.getElementById('formResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Loading...';
+
+            fetch(baseUrl + '/api/enquiry', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: 'Test User',
+                    email: 'test@example.com',
+                    phone: '1234567890',
+                    subject: 'Test Enquiry'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                resultDiv.className = data.success ? 'result success' : 'result error';
+            })
+            .catch(error => {
+                resultDiv.textContent = 'Error: ' + error.message;
+                resultDiv.className = 'result error';
+            });
+        }
+
+        function testContact() {
+            const resultDiv = document.getElementById('formResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Loading...';
+
+            fetch(baseUrl + '/api/contact', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: 'Test User',
+                    email: 'test@example.com',
+                    subject: 'Test Subject',
+                    description: 'This is a test message'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                resultDiv.className = data.success ? 'result success' : 'result error';
+            })
+            .catch(error => {
+                resultDiv.textContent = 'Error: ' + error.message;
+                resultDiv.className = 'result error';
+            });
+        }
+
+        function testAdminLogin() {
+            const resultDiv = document.getElementById('adminResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Loading...';
+
+            const username = document.getElementById('adminUsername').value;
+            const password = document.getElementById('adminPassword').value;
+
+            fetch(baseUrl + '/api/admin/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                if (data.success && data.sessionId) {
+                    sessionId = data.sessionId;
+                    document.getElementById('checkAuthBtn').disabled = false;
+                    resultDiv.className = 'result success';
+                } else {
+                    resultDiv.className = 'result error';
+                }
+            })
+            .catch(error => {
+                resultDiv.textContent = 'Error: ' + error.message;
+                resultDiv.className = 'result error';
+            });
+        }
+
+        function testCheckAuth() {
+            if (!sessionId) {
+                alert('Please login first');
+                return;
+            }
+
+            const resultDiv = document.getElementById('adminResult');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Loading...';
+
+            fetch(baseUrl + '/api/admin/check-auth', {
+                method: 'GET',
+                headers: {
+                    'x-session-id': sessionId
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                resultDiv.textContent = JSON.stringify(data, null, 2);
+                resultDiv.className = data.success && data.authenticated ? 'result success' : 'result error';
+            })
+            .catch(error => {
+                resultDiv.textContent = 'Error: ' + error.message;
+                resultDiv.className = 'result error';
+            });
+        }
+    </script>
+</body>
+</html>
