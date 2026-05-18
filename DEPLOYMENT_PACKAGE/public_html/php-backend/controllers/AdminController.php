@@ -9,6 +9,7 @@ require_once __DIR__ . '/../utils/Request.php';
 require_once __DIR__ . '/../middleware/Auth.php';
 require_once __DIR__ . '/../services/EmailService.php';
 require_once __DIR__ . '/../utils/FileUpload.php';
+require_once __DIR__ . '/../services/DocumentsSchema.php';
 
 class AdminController {
     private $db;
@@ -18,6 +19,7 @@ class AdminController {
     
     public function __construct() {
         $this->db = Database::getInstance();
+        DocumentsSchema::ensure($this->db);
         $this->auth = new Auth();
         $this->emailService = new EmailService();
         $this->fileUpload = new FileUpload();

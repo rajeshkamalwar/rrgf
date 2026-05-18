@@ -7,6 +7,7 @@ require_once __DIR__ . '/../services/Database.php';
 require_once __DIR__ . '/../utils/Response.php';
 require_once __DIR__ . '/../utils/Request.php';
 require_once __DIR__ . '/../services/EmailService.php';
+require_once __DIR__ . '/../services/DocumentsSchema.php';
 
 class PublicController {
     private $db;
@@ -14,6 +15,7 @@ class PublicController {
     
     public function __construct() {
         $this->db = Database::getInstance();
+        DocumentsSchema::ensure($this->db);
         $this->emailService = new EmailService();
     }
     

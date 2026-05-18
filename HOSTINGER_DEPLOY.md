@@ -184,6 +184,7 @@ npm run dev
 | Login works in CLI, not web | Deployed only to `~/public_html` | Sync to `domains/.../public_html` |
 | 500 login, `root` / no password | `database.local.php` missing on LIVE | Create `php-backend/config/database.local.php` on LIVE (hPanel MySQL credentials); redeploy restores if backup exists |
 | “Database reset” after git deploy | Usually credentials file lost, not MySQL emptied | Check phpMyAdmin — tables still there; fix `database.local.php` |
+| `/api/admin/documents` HTTP 500, `Unknown column sort_order` | MySQL missing MPD columns on `documents` | phpMyAdmin: run `php-backend/database/documents_visibility_sort_migration.sql` **or** SSH: `cd LIVE/php-backend && php database/run_local_migrations.php` **or** redeploy latest PHP (auto-migrates on first API hit) |
 | File Manager upload stuck at 9215 bytes | Old file cached / wrong folder | Delete file, re-upload, or use `git clone` + `deploy.sh` |
 
 ---
