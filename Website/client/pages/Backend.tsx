@@ -29,7 +29,6 @@ import {
   RefreshCw,
   Edit2,
   ClipboardList,
-  GripVertical,
   Pencil,
   Plus,
   Trash2 as TrashIcon,
@@ -53,7 +52,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Link } from 'react-router-dom';
 import { MpdCategoryManager } from '@/components/MpdCategoryManager';
 import { MpdSectionBuilder } from '@/components/MpdSectionBuilder';
-import { MpdDisclosureWizard } from '@/components/MpdDisclosureWizard';
+import { MpdDisclosureWizard, type MpdDocumentsPanelOptions } from '@/components/MpdDisclosureWizard';
+import {
+  MpdDocumentSectionEditor,
+  type NewDocumentDraft,
+} from '@/components/MpdDocumentSectionEditor';
+import type { MpdAdminDocumentRow } from '@/components/MpdDocumentRowCard';
 import {
   Accordion,
   AccordionContent,
@@ -105,8 +109,10 @@ function sortMandatoryDocs(docs: Document[]): Document[] {
 }
 
 function reorderMandatoryDocsById(list: Document[], fromId: string, toId: string): Document[] {
-  const ix = list.findIndex((d) => d.id === fromId);
-  const iy = list.findIndex((d) => d.id === toId);
+  const from = String(fromId);
+  const to = String(toId);
+  const ix = list.findIndex((d) => String(d.id) === from);
+  const iy = list.findIndex((d) => String(d.id) === to);
   if (ix < 0 || iy < 0 || ix === iy) return list;
   const copy = [...list];
   const [removed] = copy.splice(ix, 1);
@@ -188,6 +194,8 @@ const Backend = () => {
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const editingTitleRef = useRef<HTMLInputElement>(null);
   const [showAddDocForm, setShowAddDocForm] = useState(false);
+  const [docRowCreateBusy, setDocRowCreateBusy] = useState(false);
+  const [docAutoGenBusy, setDocAutoGenBusy] = useState(false);
   const [newDoc, setNewDoc] = useState<{
     category: string;
     segment_id: string;
@@ -434,7 +442,12 @@ const Backend = () => {
     }
     const baseList = sortMandatoryDocs(documents.filter((d) => d.category === category));
     const newOrder = reorderMandatoryDocsById(baseList, fromId, toId);
-    const ids = newOrder.map((d) => d.id);
+    const ids = newOrder.map((d) => String(d.id));
+    setDocuments((prev) => {
+      const others = prev.filter((d) => d.category !== category);
+      const updated = newOrder.map((d, i) => ({ ...d, sort_order: (i + 1) * 10 }));
+      return [...others, ...updated];
+    });
     try {
       const response = await fetch('/api/admin/documents/reorder', {
         method: 'PUT',
@@ -450,9 +463,11 @@ const Backend = () => {
         await loadDocuments();
       } else {
         toast.error(data.error || 'Failed to reorder');
+        await loadDocuments();
       }
     } catch {
       toast.error('Failed to reorder documents');
+      await loadDocuments();
     }
   };
 
@@ -506,40 +521,98 @@ const Backend = () => {
     finally { setEditingTitleId(null); }
   };
 
-  const createMandatoryDocument = async () => {
+  const createMandatoryDocumentRow = async (
+    categoryId: string,
+    draft?: Partial<NewDocumentDraft & { sno?: string }>,
+    opts?: { quiet?: boolean },
+  ) => {
     const sessionId = localStorage.getItem('adminSessionId');
-    if (!sessionId) { toast.error('Session expired'); setIsAuthenticated(false); return; }
-    if (!newDoc.information.trim()) { toast.error('Title is required'); return; }
+    if (!sessionId) {
+      toast.error('Session expired');
+      setIsAuthenticated(false);
+      return;
+    }
+    const row = {
+      information: draft?.information ?? newDoc.information,
+      segment_id: draft?.segment_id ?? newDoc.segment_id,
+      link: draft?.link ?? newDoc.link,
+      auto_map_segment: draft?.auto_map_segment ?? newDoc.auto_map_segment,
+      sno: draft?.sno ?? newDoc.sno,
+    };
+    if (!row.information.trim()) {
+      toast.error('Title is required');
+      return;
+    }
+    if (!opts?.quiet) setDocRowCreateBusy(true);
     try {
       const res = await fetch('/api/admin/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
         body: JSON.stringify({
-          category: newDoc.category,
-          information: newDoc.information.trim(),
-          sno: newDoc.sno.trim() || undefined,
-          link: newDoc.link.trim() || '#',
-          segment_id: newDoc.segment_id || undefined,
-          auto_map_segment: newDoc.auto_map_segment,
+          category: categoryId,
+          information: row.information.trim(),
+          sno: row.sno.trim() || undefined,
+          link: row.link.trim() || '#',
+          segment_id: row.segment_id || undefined,
+          auto_map_segment: row.auto_map_segment,
         }),
       });
       const data = await res.json();
       if (data.success && data.document) {
         setDocuments((prev) => [...prev, data.document]);
-        setNewDoc({
-          category: docSections[0]?.id ?? 'documents',
+        setNewDoc((p) => ({
+          ...p,
+          category: categoryId,
           segment_id: '',
           auto_map_segment: true,
           information: '',
           sno: '',
           link: '',
-        });
+        }));
         setShowAddDocForm(false);
         toast.success('Document row created');
-      } else {
-        toast.error(data.error || 'Failed to create document');
+        return data.document as Document;
       }
-    } catch { toast.error('Failed to create document'); }
+      toast.error(data.error || 'Failed to create document');
+    } catch {
+      toast.error('Failed to create document');
+    } finally {
+      if (!opts?.quiet) setDocRowCreateBusy(false);
+    }
+    return null;
+  };
+
+  const autoGenerateSegmentRows = async (categoryId: string) => {
+    const sec = docSections.find((s) => s.id === categoryId);
+    if (!sec?.segments.length) {
+      toast.message('No sub-sections defined for this block');
+      return;
+    }
+    setDocAutoGenBusy(true);
+    try {
+      let created = 0;
+      for (const seg of sec.segments) {
+        const exists = documents.some(
+          (d) => d.category === categoryId && (d.segment_id || '') === seg.id,
+        );
+        if (exists) continue;
+        const doc = await createMandatoryDocumentRow(
+          categoryId,
+          {
+            information: seg.label,
+            segment_id: seg.id,
+            link: '#',
+            auto_map_segment: false,
+          },
+          { quiet: true },
+        );
+        if (doc) created += 1;
+      }
+      if (created > 0) toast.success(`Added ${created} suggested row${created === 1 ? '' : 's'}`);
+      else toast.message('All suggested rows already exist');
+    } finally {
+      setDocAutoGenBusy(false);
+    }
   };
 
   const deleteMandatoryDocument = async (doc: Document) => {
@@ -1898,6 +1971,120 @@ const Backend = () => {
         );
       }
       const dl = appendixDaysRemaining(mpdDraft.complianceDeadline);
+      const previewDocuments = documents.filter((d) => !isMandatoryDocHidden(d));
+
+      const renderMpdDocumentsPanel = (options?: MpdDocumentsPanelOptions) => {
+        const categoryOnly = options?.categoryId;
+        const showBulk = options?.includeCategoryManager ?? !categoryOnly;
+        const panelSections = categoryOnly
+          ? docSections.filter((s) => s.id === categoryOnly)
+          : docSections;
+        const panelSection = categoryOnly ? panelSections[0] : undefined;
+
+        const renderEditor = (sec: (typeof docSections)[number]) => (
+          <MpdDocumentSectionEditor
+            key={sec.id}
+            section={sec}
+            documents={documents as MpdAdminDocumentRow[]}
+            docSections={docSections}
+            draft={{
+              information: newDoc.category === sec.id ? newDoc.information : '',
+              segment_id: newDoc.category === sec.id ? newDoc.segment_id : '',
+              link: newDoc.category === sec.id ? newDoc.link : '',
+              auto_map_segment: newDoc.auto_map_segment,
+            }}
+            onDraftChange={(patch) =>
+              setNewDoc((p) => ({
+                ...p,
+                category: sec.id,
+                ...patch,
+              }))
+            }
+            onCreateRow={(override) => void createMandatoryDocumentRow(sec.id, override)}
+            onAutoGenerateSegments={
+              sec.segments.length > 0 ? () => autoGenerateSegmentRows(sec.id) : undefined
+            }
+            autoGenerateBusy={docAutoGenBusy}
+            createBusy={docRowCreateBusy}
+            onReorder={(fromId, toId) =>
+              void reorderMandatoryDocumentsCategory(sec.id, fromId, toId)
+            }
+            expandedDocId={selectedDocument?.id ?? null}
+            onExpandDoc={(docId) => {
+              if (!docId) {
+                setSelectedDocument(null);
+                return;
+              }
+              const d = documents.find((x) => x.id === docId);
+              setSelectedDocument(d ?? null);
+            }}
+            editingTitleId={editingTitleId}
+            onEditingTitleId={setEditingTitleId}
+            uploadingFile={uploadingFile}
+            onSaveTitle={(docId, title) => void saveDocumentTitle(docId, title)}
+            onToggleHidden={(doc, hidden) => void toggleMandatoryDocumentHidden(doc, hidden)}
+            onDelete={(doc) => void deleteMandatoryDocument(doc)}
+            onFileUpload={(e, docId) => handleFileUpload(e, docId)}
+            onLinkBlur={(docId, link) => {
+              const d = documents.find((x) => x.id === docId);
+              if (d && link !== d.link) void handleUpdateDocumentLink(docId, link);
+            }}
+            onSegmentChange={(docId, segmentId) => void saveDocumentSegment(docId, segmentId)}
+            onAutoMapSegment={(doc) => void autoMapDocumentSegment(doc)}
+          />
+        );
+
+        if (categoryOnly && panelSection) {
+          return renderEditor(panelSection);
+        }
+
+        return (
+          <>
+            <Accordion
+              type="multiple"
+              defaultValue={['__categories__', ...panelSections.slice(0, 1).map((s) => s.id)]}
+              className="w-full space-y-2"
+            >
+              {showBulk ? (
+                <AccordionItem value="__categories__" className="rounded-lg border px-3 border-b">
+                  <AccordionTrigger className="hover:no-underline py-3">
+                    <div className="flex items-center gap-2 text-left">
+                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-semibold">Document categories &amp; segments (bulk)</span>
+                      <Badge variant="secondary">{docSections.length}</Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-4">
+                    <MpdCategoryManager
+                      categories={docSections}
+                      onChange={setDocumentCategories}
+                      onSave={(cats) => saveDocumentCategories(cats)}
+                      saving={mpdSaving}
+                      docCounts={docCountsByCategory}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              ) : null}
+
+              {panelSections.map((sec) => (
+                <AccordionItem key={sec.id} value={sec.id} className="rounded-lg border px-3 border-b">
+                  <AccordionTrigger className="hover:no-underline py-3">
+                    <div className="flex flex-1 items-center gap-2 text-left min-w-0 pr-2">
+                      <Badge variant="default" className="shrink-0 font-mono">{sec.letter}</Badge>
+                      <span className="font-semibold truncate">{sec.title}</span>
+                      <Badge variant="secondary" className="shrink-0">
+                        {(docCountsByCategory[sec.id] ?? 0)} row
+                        {(docCountsByCategory[sec.id] ?? 0) === 1 ? '' : 's'}
+                      </Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pb-4">{renderEditor(sec)}</AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </>
+        );
+      };
 
       return (
         <MpdDisclosureWizard
@@ -1908,466 +2095,16 @@ const Backend = () => {
           teacherListUrl={getTeacherListUrlFromSections(mpdDraft.sections)}
           uploadingTeacherList={uploadingTeacherList}
           docCounts={docCountsByCategory}
+          previewDocuments={previewDocuments}
           onSave={() => void saveMpdAdminPayload()}
           onSectionsChange={(next) => setMpdDraft((p) => (p ? { ...p, sections: next } : p))}
           onLegalChange={(patch) => setMpdDraft((p) => (p ? { ...p, ...patch } : p))}
           onTeacherListUpload={handleTeacherListUpload}
           onDownloadTeacherSample={downloadTeacherSampleCsv}
-          renderDocuments={() => (
-            <>
-          {/* Header */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Mandatory disclosure documents
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    Drag ⠿ to reorder · Click ✏ to rename · Toggle to show/hide on public page · Delete removes the row permanently.
-                  </CardDescription>
-                </div>
-                <Button size="sm" onClick={() => setShowAddDocForm((v) => !v)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  {showAddDocForm ? 'Cancel' : 'Add Document'}
-                </Button>
-              </div>
-            </CardHeader>
-
-            {/* ── Add Document Form ── */}
-            {showAddDocForm && (
-              <CardContent className="border-t pt-5 space-y-4">
-                <p className="text-sm font-semibold">New Document Row</p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label>Category</Label>
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="h-auto p-0 text-xs"
-                        onClick={() => setShowQuickNewCategory((v) => !v)}
-                      >
-                        {showQuickNewCategory ? 'Cancel' : '+ New category'}
-                      </Button>
-                    </div>
-                    <Select
-                      value={newDoc.category}
-                      onValueChange={(v) =>
-                        setNewDoc((p) => ({ ...p, category: v, segment_id: '' }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {docSections.map((sec) => (
-                          <SelectItem key={sec.id} value={sec.id}>
-                            {sec.letter} — {sec.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {showQuickNewCategory ? (
-                    <div className="rounded-md border p-3 space-y-2 sm:col-span-2 lg:col-span-4">
-                      <p className="text-xs font-medium">Create category</p>
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <Input
-                          placeholder="Letter (e.g. F)"
-                          maxLength={3}
-                          value={quickCategory.letter}
-                          onChange={(e) =>
-                            setQuickCategory((p) => ({ ...p, letter: e.target.value }))
-                          }
-                        />
-                        <Input
-                          className="sm:col-span-2"
-                          placeholder="Title (required)"
-                          value={quickCategory.title}
-                          onChange={(e) =>
-                            setQuickCategory((p) => ({ ...p, title: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <Input
-                        placeholder="Slug ID (optional, auto from title)"
-                        value={quickCategory.id}
-                        onChange={(e) => setQuickCategory((p) => ({ ...p, id: e.target.value }))}
-                      />
-                      <Button type="button" size="sm" onClick={() => void handleQuickCreateCategory()}>
-                        Create category &amp; select
-                      </Button>
-                    </div>
-                  ) : null}
-                  {(() => {
-                    const sec = docSections.find((s) => s.id === newDoc.category);
-                    if (!sec?.segments.length) return null;
-                    return (
-                      <div className="space-y-1">
-                        <Label>Segment (optional)</Label>
-                        <Select
-                          value={newDoc.segment_id || '_none'}
-                          onValueChange={(v) =>
-                            setNewDoc((p) => ({
-                              ...p,
-                              segment_id: v === '_none' ? '' : v,
-                            }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Auto or pick…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="_none">— Auto from keywords —</SelectItem>
-                            {sec.segments.map((seg) => (
-                              <SelectItem key={seg.id} value={seg.id}>
-                                {seg.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    );
-                  })()}
-                  <div className="flex items-center gap-2 sm:col-span-2">
-                    <Checkbox
-                      id="auto-map-seg-mpd"
-                      checked={newDoc.auto_map_segment}
-                      onCheckedChange={(checked) =>
-                        setNewDoc((p) => ({ ...p, auto_map_segment: Boolean(checked) }))
-                      }
-                    />
-                    <Label htmlFor="auto-map-seg-mpd" className="text-sm font-normal">
-                      Auto-map segment from title keywords
-                    </Label>
-                  </div>
-                  <div className="space-y-1 sm:col-span-1 lg:col-span-2">
-                    <Label>Title / Information <span className="text-destructive">*</span></Label>
-                    <Input
-                      placeholder="e.g. Fire Safety Certificate"
-                      value={newDoc.information}
-                      onChange={(e) => setNewDoc((p) => ({ ...p, information: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>S.No (optional)</Label>
-                    <Input
-                      placeholder="auto"
-                      value={newDoc.sno}
-                      onChange={(e) => setNewDoc((p) => ({ ...p, sno: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label>Link (optional)</Label>
-                  <Input
-                    placeholder="/documents/fire.pdf or https://…"
-                    value={newDoc.link}
-                    onChange={(e) => setNewDoc((p) => ({ ...p, link: e.target.value }))}
-                  />
-                </div>
-                <Button onClick={() => void createMandatoryDocument()}>
-                  <Plus className="h-4 w-4 mr-1" /> Create Row
-                </Button>
-              </CardContent>
-            )}
-          </Card>
-
-          <Accordion
-            type="multiple"
-            defaultValue={['__categories__', ...docSections.slice(0, 1).map((s) => s.id)]}
-            className="w-full space-y-2"
-          >
-            <AccordionItem value="__categories__" className="rounded-lg border px-3 border-b">
-              <AccordionTrigger className="hover:no-underline py-3">
-                <div className="flex items-center gap-2 text-left">
-                  <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-semibold">Document categories &amp; segments (bulk)</span>
-                  <Badge variant="secondary">{docSections.length}</Badge>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-4">
-                <MpdCategoryManager
-                  categories={docSections}
-                  onChange={setDocumentCategories}
-                  onSave={(cats) => saveDocumentCategories(cats)}
-                  saving={mpdSaving}
-                  docCounts={docCountsByCategory}
-                />
-              </AccordionContent>
-            </AccordionItem>
-
-          {docSections.map((sec) => {
-            const category = sec.id;
-            const sectionDocs = sortMandatoryDocs(documents.filter((d) => d.category === category));
-            return (
-              <AccordionItem key={category} value={category} className="rounded-lg border px-3 border-b">
-                <AccordionTrigger className="hover:no-underline py-3">
-                  <div className="flex flex-1 items-center gap-2 text-left min-w-0 pr-2">
-                    <Badge variant="default" className="shrink-0 font-mono">{sec.letter}</Badge>
-                    <span className="font-semibold truncate">{sec.title}</span>
-                    <Badge variant="secondary" className="shrink-0">
-                      {sectionDocs.length} row{sectionDocs.length === 1 ? '' : 's'}
-                    </Badge>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="pb-4">
-                  {sectionDocs.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No rows yet. Use "Add Document" above.</p>
-                  )}
-                  <div className="space-y-3">
-                    {sectionDocs.map((doc) => {
-                      const isEditing = editingTitleId === doc.id;
-                      const isExpanded = selectedDocument?.id === doc.id;
-                      const hidden = isMandatoryDocHidden(doc);
-                      const titleText = (doc.document || doc.information) ?? '';
-                      const segDef = docSections.find((s) => s.id === category);
-
-                      return (
-                        <div
-                          key={doc.id}
-                          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            const fromId = e.dataTransfer.getData('text/plain');
-                            if (fromId && fromId !== doc.id)
-                              void reorderMandatoryDocumentsCategory(category, fromId, doc.id);
-                          }}
-                          className={`border rounded-lg p-3 space-y-3 transition-colors ${
-                            hidden ? 'opacity-70 bg-muted/30 border-dashed' : 'bg-card'
-                          }`}
-                        >
-                          {/* Row header */}
-                          <div className="flex items-start gap-2">
-                            {/* Drag handle */}
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              draggable
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData('text/plain', doc.id);
-                                e.dataTransfer.effectAllowed = 'move';
-                              }}
-                              className="mt-1 text-muted-foreground hover:text-foreground shrink-0 cursor-grab active:cursor-grabbing touch-none"
-                              aria-label="Drag to reorder"
-                            >
-                              <GripVertical className="h-5 w-5" />
-                            </div>
-
-                            {/* S.No badge */}
-                            <span className="mt-1 shrink-0 text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
-                              #{doc.sno}
-                            </span>
-
-                            {/* Title — inline edit */}
-                            <div className="flex-1 min-w-0">
-                              {isEditing ? (
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    ref={editingTitleRef}
-                                    className="h-7 text-sm"
-                                    defaultValue={titleText}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter')
-                                        void saveDocumentTitle(doc.id, (e.target as HTMLInputElement).value);
-                                      if (e.key === 'Escape') setEditingTitleId(null);
-                                    }}
-                                    autoFocus
-                                  />
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 shrink-0"
-                                    onClick={() => {
-                                      const val = editingTitleRef.current?.value ?? '';
-                                      void saveDocumentTitle(doc.id, val);
-                                    }}
-                                  >
-                                    <Check className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-7 w-7 shrink-0"
-                                    onClick={() => setEditingTitleId(null)}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-sm font-medium leading-tight">{titleText}</span>
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-6 w-6 shrink-0"
-                                    title="Rename"
-                                    onClick={() => {
-                                      setEditingTitleId(doc.id);
-                                      setEditingTitleValue(titleText);
-                                    }}
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              )}
-
-                              {/* Status + badges */}
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                <span className={`px-1.5 py-0.5 rounded text-xs ${
-                                  doc.status === '✓ Available'
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {doc.status}
-                                </span>
-                                {hidden && (
-                                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-900">
-                                    <EyeOff className="h-3 w-3" /> Hidden
-                                  </span>
-                                )}
-                                {doc.link && doc.link !== '#' && (
-                                  <span className="text-xs text-muted-foreground truncate max-w-[180px]">
-                                    {doc.link}
-                                  </span>
-                                )}
-                                {segDef && segDef.segments.length > 0 ? (
-                                  <span className="text-xs text-muted-foreground">
-                                    Segment:{' '}
-                                    {segmentLabel(docSections, category, doc.segment_id) || '— unmapped —'}
-                                  </span>
-                                ) : null}
-                              </div>
-                              {segDef && segDef.segments.length > 0 ? (
-                                <div className="flex flex-wrap items-center gap-2 mt-2">
-                                  <Select
-                                    value={doc.segment_id || '_none'}
-                                    onValueChange={(v) =>
-                                      void saveDocumentSegment(doc.id, v === '_none' ? '' : v)
-                                    }
-                                  >
-                                    <SelectTrigger className="h-8 w-[200px] text-xs">
-                                      <SelectValue placeholder="Segment" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="_none">— None —</SelectItem>
-                                      {segDef.segments.map((seg) => (
-                                        <SelectItem key={seg.id} value={seg.id}>
-                                          {seg.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 text-xs"
-                                    onClick={() => void autoMapDocumentSegment(doc)}
-                                  >
-                                    Auto-map
-                                  </Button>
-                                </div>
-                              ) : null}
-                            </div>
-
-                            {/* Right controls */}
-                            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-muted-foreground whitespace-nowrap">Show</span>
-                                <Switch
-                                  id={`show-${doc.id}`}
-                                  checked={!hidden}
-                                  onCheckedChange={(checked) =>
-                                    void toggleMandatoryDocumentHidden(doc, !checked)
-                                  }
-                                />
-                              </div>
-
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  setSelectedDocument(isExpanded ? null : doc)
-                                }
-                              >
-                                {isExpanded ? 'Close' : 'Edit Link'}
-                              </Button>
-
-                              {/* Delete with confirm */}
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="outline" size="icon" className="h-8 w-8 text-destructive border-destructive/30 hover:bg-destructive/10">
-                                    <TrashIcon className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete document row?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will permanently remove &quot;{titleText}&quot; from the disclosure table. This cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                      onClick={() => void deleteMandatoryDocument(doc)}
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </div>
-
-                          {/* Expanded: upload / link edit */}
-                          {isExpanded && (
-                            <div className="border-t pt-3 space-y-3">
-                              <div className="space-y-1">
-                                <Label className="text-xs">Upload New PDF</Label>
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    type="file"
-                                    accept=".pdf"
-                                    onChange={(e) => handleFileUpload(e, doc.id)}
-                                    disabled={uploadingFile}
-                                    className="flex-1 text-xs"
-                                  />
-                                  {uploadingFile && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
-                                </div>
-                              </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs">Or set link manually</Label>
-                                <div className="flex gap-2">
-                                  <Input
-                                    className="text-xs"
-                                    placeholder="/documents/file.pdf or https://…"
-                                    defaultValue={doc.link === '#' ? '' : doc.link}
-                                    onBlur={(e) => {
-                                      const v = e.target.value.trim() || '#';
-                                      if (v !== doc.link)
-                                        handleUpdateDocumentLink(doc.id, v);
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            );
-          })}
-          </Accordion>
-            </>
-          )}
+          renderDocuments={renderMpdDocumentsPanel}
+          documentCategories={docSections}
+          onCategoriesChange={setDocumentCategories}
+          onSaveCategories={(cats) => saveDocumentCategories(cats)}
         />
       );
     }

@@ -32,6 +32,8 @@ export interface MpdCategoryManagerProps {
   saving?: boolean;
   showSaveButton?: boolean;
   docCounts?: Record<string, number>;
+  /** Hide technical fields (slug, sort order); segments collapsed by default. */
+  simplified?: boolean;
 }
 
 function categoryItemValue(cat: MpdDocumentSection, index: number): string {
@@ -45,6 +47,7 @@ export function MpdCategoryManager({
   saving = false,
   showSaveButton = true,
   docCounts,
+  simplified = false,
 }: MpdCategoryManagerProps) {
   const defaultOpen = useMemo(
     () => categories.slice(0, 2).map((cat, i) => categoryItemValue(cat, i)),
@@ -70,7 +73,8 @@ export function MpdCategoryManager({
           </Button>
         ) : null}
         <p className="text-xs text-muted-foreground w-full sm:w-auto sm:ml-auto">
-          {categories.length} categor{categories.length === 1 ? 'y' : 'ies'} · expand to edit
+          {categories.length} PDF section{categories.length === 1 ? '' : 's'}
+          {simplified ? ' · edit letter & title' : ' · expand to edit'}
         </p>
       </div>
 
@@ -112,7 +116,8 @@ export function MpdCategoryManager({
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pb-4 pt-0 space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className={`grid gap-3 ${simplified ? 'sm:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-4'}`}>
+                    {!simplified ? (
                     <div className="space-y-1">
                       <Label className="text-xs">Category ID (slug, DB)</Label>
                       <Input
@@ -120,8 +125,9 @@ export function MpdCategoryManager({
                         onChange={(e) => onChange(updateDocumentCategoryAt(categories, cIdx, { id: e.target.value }))}
                       />
                     </div>
+                    ) : null}
                     <div className="space-y-1">
-                      <Label className="text-xs">Appendix letter</Label>
+                      <Label className="text-xs">{simplified ? 'Letter (B, C, E…)' : 'Appendix letter'}</Label>
                       <Input
                         maxLength={3}
                         value={cat.letter}
@@ -130,8 +136,8 @@ export function MpdCategoryManager({
                         }
                       />
                     </div>
-                    <div className="space-y-1 sm:col-span-2">
-                      <Label className="text-xs">Public title</Label>
+                    <div className={`space-y-1 ${simplified ? 'sm:col-span-2' : 'sm:col-span-2'}`}>
+                      <Label className="text-xs">{simplified ? 'Heading on public page' : 'Public title'}</Label>
                       <Input
                         value={cat.title}
                         onChange={(e) =>
@@ -139,6 +145,7 @@ export function MpdCategoryManager({
                         }
                       />
                     </div>
+                    {!simplified ? (
                     <div className="space-y-1">
                       <Label className="text-xs">Display order</Label>
                       <Input
@@ -154,9 +161,16 @@ export function MpdCategoryManager({
                         }
                       />
                     </div>
+                    ) : null}
                   </div>
 
-                  <Collapsible defaultOpen={cat.segments.length > 0}>
+                  {simplified ? (
+                    <p className="text-xs text-muted-foreground">
+                      Internal id: <span className="font-mono">{cat.id}</span>
+                    </p>
+                  ) : null}
+
+                  <Collapsible defaultOpen={!simplified && cat.segments.length > 0}>
                     <div className="rounded-md border">
                       <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors [&[data-state=open]>svg]:rotate-180">
                         <span className="flex items-center gap-2">
@@ -261,8 +275,9 @@ export function MpdCategoryManager({
       <p className="text-xs text-muted-foreground flex items-start gap-2">
         <FolderOpen className="h-3.5 w-3.5 shrink-0 mt-0.5" />
         <span>
-          Each category ID is stored on document rows as <span className="font-mono">category</span>. Save before
-          adding documents to new categories.
+          {simplified
+            ? 'Click Save categories after changing headings. Upload PDFs in each section’s wizard step.'
+            : <>Each category ID is stored on document rows as <span className="font-mono">category</span>. Save before adding documents to new categories.</>}
         </span>
       </p>
     </div>

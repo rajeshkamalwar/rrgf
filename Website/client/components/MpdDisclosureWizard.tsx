@@ -5,14 +5,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Circle,
-  ClipboardList,
   ExternalLink,
-  FileText,
   Loader2,
-  School,
-  Settings2,
   Upload,
-  Users,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -20,52 +15,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { MpdPayloadV2, MpdSection } from '@/lib/mpdDocumentSections';
+import { sortMpdSections } from '@/lib/mpdDocumentSections';
+import { buildMpdWizardSteps, findSectionById } from '@/lib/mpdWizardSteps';
+import { MpdAdvancedPanel } from '@/components/MpdAdvancedPanel';
 import { MpdSectionBuilder } from '@/components/MpdSectionBuilder';
+import { MpdSectionPreview } from '@/components/MpdSectionPreview';
+import type { MpdDocumentSection } from '@/lib/mpdDocumentSections';
+import type { MpdDocumentRow } from '@/components/MpdSectionRenderer';
 
-const STEPS = [
-  {
-    id: 'overview',
-    title: 'Overview',
-    short: 'Start',
-    description: 'What to do and when to save',
-    icon: ClipboardList,
-  },
-  {
-    id: 'school',
-    title: 'School information',
-    short: 'Section A',
-    description: 'Name, address, contact details',
-    icon: School,
-  },
-  {
-    id: 'documents',
-    title: 'Upload PDFs',
-    short: 'Documents',
-    description: 'Certificates and mandatory files',
-    icon: FileText,
-  },
-  {
-    id: 'tables',
-    title: 'Staff & infrastructure',
-    short: 'B–E tables',
-    description: 'Staff counts, results, building details',
-    icon: Users,
-  },
-  {
-    id: 'legal',
-    title: 'Legal & teacher list',
-    short: 'Finish',
-    description: 'Disclaimer, deadline, teacher file',
-    icon: CheckCircle2,
-  },
-  {
-    id: 'advanced',
-    title: 'Advanced',
-    short: 'Optional',
-    description: 'Reorder sections, add groups, expert options',
-    icon: Settings2,
-  },
-] as const;
+export interface MpdDocumentsPanelOptions {
+  /** Show only PDF rows for this document_list section id (matches public page block). */
+  categoryId?: string;
+  /** Bulk category/segment editor (Advanced step only). */
+  includeCategoryManager?: boolean;
+}
 
 export interface MpdDisclosureWizardProps {
   mpdDraft: MpdPayloadV2;
@@ -75,12 +38,17 @@ export interface MpdDisclosureWizardProps {
   teacherListUrl: string;
   uploadingTeacherList: boolean;
   docCounts?: Record<string, number>;
+  /** Documents for live public-page preview (non-hidden). */
+  previewDocuments: MpdDocumentRow[];
   onSave: () => void;
   onSectionsChange: (sections: MpdSection[]) => void;
   onLegalChange: (patch: Partial<Pick<MpdPayloadV2, 'legalDisclaimer' | 'complianceDeadline' | 'directiveReference'>>) => void;
   onTeacherListUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDownloadTeacherSample: () => void;
-  renderDocuments: () => React.ReactNode;
+  renderDocuments: (options?: MpdDocumentsPanelOptions) => React.ReactNode;
+  documentCategories: MpdDocumentSection[];
+  onCategoriesChange: (categories: MpdDocumentSection[]) => void;
+  onSaveCategories: (categories: MpdDocumentSection[]) => void | Promise<void>;
 }
 
 export function MpdDisclosureWizard({
@@ -91,36 +59,56 @@ export function MpdDisclosureWizard({
   teacherListUrl,
   uploadingTeacherList,
   docCounts,
+  previewDocuments,
   onSave,
   onSectionsChange,
   onLegalChange,
   onTeacherListUpload,
   onDownloadTeacherSample,
   renderDocuments,
+  documentCategories,
+  onCategoriesChange,
+  onSaveCategories,
 }: MpdDisclosureWizardProps) {
-  const [step, setStep] = useState(0);
-  const current = STEPS[step];
-
-  const generalSection = useMemo(
-    () =>
-      mpdDraft.sections.find((s) => s.id === 'general_information' && s.type === 'table') ??
-      mpdDraft.sections.find((s) => s.type === 'table'),
+  const steps = useMemo(() => buildMpdWizardSteps(mpdDraft.sections), [mpdDraft.sections]);
+  const publicSections = useMemo(
+    () => sortMpdSections(mpdDraft.sections).filter((s) => s.visible),
     [mpdDraft.sections],
   );
 
-  const tableSectionFilter = (s: MpdSection) =>
-    s.type === 'staff_table' || s.type === 'result_table' || s.type === 'infra_table';
+  const [step, setStep] = useState(0);
+  const current = steps[step] ?? steps[0];
+  const activeSection =
+    current?.kind === 'section' && current.sectionId
+      ? findSectionById(mpdDraft.sections, current.sectionId)
+      : undefined;
 
-  const go = (n: number) => setStep(Math.max(0, Math.min(STEPS.length - 1, n)));
+  const publicPosition =
+    activeSection != null
+      ? publicSections.findIndex((s) => s.id === activeSection.id) + 1
+      : undefined;
+
+  const go = (n: number) => setStep(Math.max(0, Math.min(steps.length - 1, n)));
+
+  const previewPanel =
+    activeSection != null ? (
+      <MpdSectionPreview
+        section={activeSection}
+        documents={previewDocuments}
+        publicPosition={publicPosition && publicPosition > 0 ? publicPosition : undefined}
+        publicTotal={publicSections.length}
+      />
+    ) : null;
 
   return (
     <div className="space-y-6">
       <Alert variant="default" className="border-red-200 bg-red-50 text-school-secondary">
         <AlertDescription className="space-y-1">
-          <div className="font-semibold">Mandatory public disclosure (CBSE Appendix‑IX)</div>
+          <div className="font-semibold">Mandatory public disclosure — WYSIWYG editor</div>
           <p className="text-sm">
-            Work through the steps below. Click <strong>Save disclosure data</strong> after each step
-            (or at the end). Deadline:{' '}
+            Each step matches <strong>one block on the public page</strong>, in the same order visitors
+            see. Edit on the left; preview updates on the right. Click{' '}
+            <strong>Save disclosure data</strong> after changes. Deadline:{' '}
             <span className="font-mono">{mpdDraft.complianceDeadline}</span>
             {complianceDaysRemaining >= 0
               ? ` (${complianceDaysRemaining} day(s) left)`
@@ -132,17 +120,20 @@ export function MpdDisclosureWizard({
 
       <Card>
         <CardContent className="pt-6">
-          <ol className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:gap-0 sm:divide-x sm:divide-border">
-            {STEPS.map((s, i) => {
+          <p className="text-xs text-muted-foreground mb-3 sm:hidden">
+            Swipe steps — same order as the public page
+          </p>
+          <ol className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch sm:gap-0 sm:divide-x sm:divide-border max-h-[280px] sm:max-h-none overflow-y-auto sm:overflow-visible">
+            {steps.map((s, i) => {
               const Icon = s.icon;
               const active = i === step;
               const done = i < step;
               return (
-                <li key={s.id} className="flex-1 min-w-[120px]">
+                <li key={s.id} className="flex-1 min-w-[100px]">
                   <button
                     type="button"
                     onClick={() => go(i)}
-                    className={`w-full flex sm:flex-col items-center gap-2 sm:gap-1 px-3 py-2 text-left sm:text-center rounded-md transition-colors ${
+                    className={`w-full flex sm:flex-col items-center gap-2 sm:gap-1 px-2 py-2 text-left sm:text-center rounded-md transition-colors ${
                       active
                         ? 'bg-school-primary/10 text-school-primary'
                         : 'hover:bg-muted/60 text-muted-foreground'
@@ -158,11 +149,15 @@ export function MpdDisclosureWizard({
                       ) : (
                         <Circle className="h-4 w-4" />
                       )}
-                      <Icon className="h-4 w-4 hidden sm:block" />
+                      <Icon className="h-4 w-4 hidden lg:block" />
                     </span>
-                    <span>
-                      <span className="block text-xs font-medium uppercase tracking-wide">{s.short}</span>
-                      <span className={`block text-sm ${active ? 'font-semibold' : ''}`}>{s.title}</span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium uppercase tracking-wide truncate">
+                        {s.short}
+                      </span>
+                      <span className={`block text-xs sm:text-sm truncate ${active ? 'font-semibold' : ''}`}>
+                        {s.title}
+                      </span>
                     </span>
                   </button>
                 </li>
@@ -176,14 +171,19 @@ export function MpdDisclosureWizard({
         <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <CardTitle>
-              Step {step + 1} of {STEPS.length}: {current.title}
+              Step {step + 1} of {steps.length}: {current.title}
+              {activeSection?.letter ? (
+                <span className="text-muted-foreground font-normal text-base ml-2">
+                  (Section {activeSection.letter})
+                </span>
+              ) : null}
             </CardTitle>
             <CardDescription>{current.description}</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
             <Button variant="outline" size="sm" asChild>
               <Link to="/mandatory-public-disclosure" target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="mr-2 h-4 w-4" /> Preview site
+                <ExternalLink className="mr-2 h-4 w-4" /> Open public page
               </Link>
             </Button>
             <Button size="sm" onClick={() => void onSave()} disabled={mpdSaving}>
@@ -200,119 +200,127 @@ export function MpdDisclosureWizard({
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {step === 0 && (
+          {current.kind === 'overview' && (
             <div className="space-y-4 text-sm">
               <p className="text-muted-foreground">
-                Follow these steps in order. You can jump between steps using the bar above. Last
-                saved: {mpdUpdatedAt ? new Date(mpdUpdatedAt).toLocaleString('en-IN') : 'not yet'}.
+                The public page shows these blocks in order. Last saved:{' '}
+                {mpdUpdatedAt ? new Date(mpdUpdatedAt).toLocaleString('en-IN') : 'not yet'}.
               </p>
-              <ul className="space-y-3">
-                {STEPS.slice(1, -1).map((s, i) => (
+              <ul className="space-y-2">
+                {publicSections.map((sec, i) => (
                   <li
-                    key={s.id}
-                    className="flex items-start gap-3 rounded-lg border p-3 bg-muted/30"
+                    key={sec.id}
+                    className="flex items-center gap-3 rounded-lg border p-3 bg-muted/30"
                   >
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-school-primary text-white text-xs font-bold">
                       {i + 1}
                     </span>
-                    <div>
-                      <p className="font-medium">{s.title}</p>
-                      <p className="text-muted-foreground">{s.description}</p>
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {sec.letter} — {sec.title}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {sec.type === 'document_list'
+                          ? 'Add PDFs in this section’s step'
+                          : sec.type === 'result_table'
+                            ? 'Results table + linked PDFs'
+                            : sec.type === 'staff_table'
+                              ? 'Staff table + teacher list file'
+                              : sec.type === 'infra_table'
+                                ? 'Infrastructure numbers + YouTube'
+                                : 'Edit fields in this section’s step'}
+                      </p>
                     </div>
                   </li>
                 ))}
               </ul>
               <Button onClick={() => go(1)}>
-                Start with school information
+                Start with {publicSections[0]?.letter ? `Section ${publicSections[0].letter}` : 'first block'}
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
           )}
 
-          {step === 1 && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Edit the particulars shown in <strong>Section A</strong> on the public page (school
-                name, address, phone, email, etc.). Use one row per line item.
-              </p>
-              {generalSection ? (
-                <MpdSectionBuilder
-                  sections={mpdDraft.sections}
-                  onChange={onSectionsChange}
-                  docCounts={docCounts}
-                  sectionFilter={(s) => s.id === generalSection.id}
-                  simpleMode
-                />
-              ) : (
-                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-3">
-                  No general information section found. Use the Advanced step to add a key/value
-                  table section.
-                </p>
-              )}
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Add each required PDF as a row, upload the file, and keep <strong>Show</strong>{' '}
-                turned on for items that should appear on the website. Categories match CBSE
-                sections (B, C, E, etc.).
-              </p>
-              {renderDocuments()}
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Fill in staff numbers, board exam results, and infrastructure parameters. Open each
-                block below to edit values.
-              </p>
-              <MpdSectionBuilder
-                sections={mpdDraft.sections}
-                onChange={onSectionsChange}
-                docCounts={docCounts}
-                sectionFilter={tableSectionFilter}
-                simpleMode
-              />
-            </div>
-          )}
-
-          {step === 4 && (
-            <div className="space-y-6">
-              <Card className="border-dashed">
-                <CardHeader>
-                  <CardTitle className="text-base">Teacher list file</CardTitle>
-                  <CardDescription>
-                    Upload the staff list PDF or spreadsheet required under Appendix‑IX.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Current:{' '}
-                    <span className="font-mono text-xs">{teacherListUrl || 'Not uploaded'}</span>
-                  </p>
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <Button variant="outline" size="sm" type="button" onClick={onDownloadTeacherSample}>
-                      Download sample CSV
-                    </Button>
-                    <Input
-                      type="file"
-                      accept=".pdf,.csv,.xlsx,.xls"
-                      className="max-w-xs"
-                      onChange={onTeacherListUpload}
-                      disabled={uploadingTeacherList}
+          {current.kind === 'section' && activeSection && (
+            <div className="grid gap-6 xl:grid-cols-2">
+              <div className="space-y-4 min-w-0">
+                {activeSection.type === 'document_list' ? (
+                  renderDocuments({ categoryId: activeSection.id })
+                ) : activeSection.type === 'staff_table' ? (
+                  <>
+                    <MpdSectionBuilder
+                      sections={mpdDraft.sections}
+                      onChange={onSectionsChange}
+                      docCounts={docCounts}
+                      sectionFilter={(s) => s.id === activeSection.id}
+                      simpleMode
                     />
-                    {uploadingTeacherList ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  </div>
-                </CardContent>
-              </Card>
+                    <Card className="border-dashed">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Teacher list file</CardTitle>
+                        <CardDescription>
+                          Shown inside Section D on the public page.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          Current:{' '}
+                          <span className="font-mono text-xs">{teacherListUrl || 'Not uploaded'}</span>
+                        </p>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <Button variant="outline" size="sm" type="button" onClick={onDownloadTeacherSample}>
+                            Download sample CSV
+                          </Button>
+                          <Input
+                            type="file"
+                            accept=".pdf,.csv,.xlsx,.xls"
+                            className="max-w-xs"
+                            onChange={onTeacherListUpload}
+                            disabled={uploadingTeacherList}
+                          />
+                          {uploadingTeacherList ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : activeSection.type === 'result_table' ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      Enter pass percentages below. Class X / XII PDFs use the same row editor — pick
+                      segment <em>Class X</em> or <em>Class XII</em>; they show above the results on
+                      the public page.
+                    </p>
+                    <MpdSectionBuilder
+                      sections={mpdDraft.sections}
+                      onChange={onSectionsChange}
+                      docCounts={docCounts}
+                      sectionFilter={(s) => s.id === activeSection.id}
+                      simpleMode
+                    />
+                    {renderDocuments({
+                      categoryId: activeSection.supportingDocsCategoryId || 'academic',
+                    })}
+                  </>
+                ) : (
+                  <MpdSectionBuilder
+                    sections={mpdDraft.sections}
+                    onChange={onSectionsChange}
+                    docCounts={docCounts}
+                    sectionFilter={(s) => s.id === activeSection.id}
+                    simpleMode
+                  />
+                )}
+              </div>
+              <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">{previewPanel}</div>
+            </div>
+          )}
 
+          {current.kind === 'legal' && (
+            <div className="grid gap-6 xl:grid-cols-2">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Legal footer &amp; compliance dates</CardTitle>
-                  <CardDescription>Shown at the bottom of the public disclosure page.</CardDescription>
+                  <CardTitle className="text-base">Legal footer &amp; compliance</CardTitle>
+                  <CardDescription>Bottom of the public disclosure page.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-1">
@@ -333,7 +341,7 @@ export function MpdDisclosureWizard({
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label>Directive reference (display text)</Label>
+                      <Label>Directive reference</Label>
                       <Input
                         value={mpdDraft.directiveReference}
                         onChange={(e) => onLegalChange({ directiveReference: e.target.value })}
@@ -342,22 +350,28 @@ export function MpdDisclosureWizard({
                   </div>
                 </CardContent>
               </Card>
+              <Card className="border-dashed">
+                <CardHeader>
+                  <CardTitle className="text-base text-sm">Preview note</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  The disclaimer and dates render below all sections on{' '}
+                  <code className="text-xs bg-muted px-1 rounded">/mandatory-public-disclosure</code>.
+                </CardContent>
+              </Card>
             </div>
           )}
 
-          {step === 5 && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                For power users: reorder appendix sections, add row groups under Section A, change
-                section types, or manage document categories in bulk. Most schools only need steps
-                1–5.
-              </p>
-              <MpdSectionBuilder
-                sections={mpdDraft.sections}
-                onChange={onSectionsChange}
-                docCounts={docCounts}
-              />
-            </div>
+          {current.kind === 'advanced' && (
+            <MpdAdvancedPanel
+              sections={mpdDraft.sections}
+              onSectionsChange={onSectionsChange}
+              docCounts={docCounts}
+              documentCategories={documentCategories}
+              onCategoriesChange={onCategoriesChange}
+              onSaveCategories={onSaveCategories}
+              categoriesSaving={mpdSaving}
+            />
           )}
         </CardContent>
       </Card>
@@ -366,10 +380,10 @@ export function MpdDisclosureWizard({
         <Button type="button" variant="outline" disabled={step === 0} onClick={() => go(step - 1)}>
           <ChevronLeft className="mr-2 h-4 w-4" /> Back
         </Button>
-        <span className="text-sm text-muted-foreground">
-          {current.title} · Step {step + 1}/{STEPS.length}
+        <span className="text-sm text-muted-foreground text-center">
+          {current.short} · {step + 1}/{steps.length}
         </span>
-        {step < STEPS.length - 1 ? (
+        {step < steps.length - 1 ? (
           <Button type="button" onClick={() => go(step + 1)}>
             Next <ChevronRight className="ml-2 h-4 w-4" />
           </Button>
