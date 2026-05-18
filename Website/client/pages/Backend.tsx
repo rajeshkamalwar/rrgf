@@ -53,6 +53,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Link } from 'react-router-dom';
 import { MpdCategoryManager } from '@/components/MpdCategoryManager';
 import { MpdSectionBuilder } from '@/components/MpdSectionBuilder';
+import { MpdDisclosureWizard } from '@/components/MpdDisclosureWizard';
 import {
   Accordion,
   AccordionContent,
@@ -1899,133 +1900,21 @@ const Backend = () => {
       const dl = appendixDaysRemaining(mpdDraft.complianceDeadline);
 
       return (
-        <div className="space-y-6">
-          <Alert variant="default" className="border-red-200 bg-red-50 text-school-secondary">
-            <AlertDescription className="space-y-1">
-              <div className="font-semibold">CBSE MPD restoration — Appendix-IX</div>
-              <div className="text-sm">
-                Target deadline:{' '}
-                <span className="font-mono">{mpdDraft.complianceDeadline}</span> (
-                {dl >= 0 ? `${dl} day(s) remaining` : `${Math.abs(dl)} day(s) past — update urgently`}). Submit mail
-                pack to{' '}
-                <a href="mailto:cbse.aff@nic.in" className="underline font-medium">
-                  cbse.aff@nic.in
-                </a>
-              </div>
-            </AlertDescription>
-          </Alert>
-
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <ClipboardList className="h-5 w-5" /> Appendix‑IX structured data
-                </CardTitle>
-                <CardDescription>
-                  Public page loads from /api/mpd · Last saved:{' '}
-                  {mpdUpdatedAt ? new Date(mpdUpdatedAt).toLocaleString('en-IN') : '—'} · Schema
-                  V2 — all sections are configurable below.
-                </CardDescription>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/mandatory-public-disclosure" target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="mr-2 h-4 w-4" /> Preview public URL
-                  </Link>
-                </Button>
-                <Button onClick={() => void saveMpdAdminPayload()} disabled={mpdSaving}>
-                  {mpdSaving ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="mr-2 h-4 w-4" /> SAVE DATA
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardHeader>
-          </Card>
-
-          <MpdSectionBuilder
-            sections={mpdDraft.sections}
-            onChange={(next) => setMpdDraft((p) => (p ? { ...p, sections: next } : p))}
-            docCounts={docCountsByCategory}
-          />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Teacher list file (Appendix‑IX)</CardTitle>
-              <CardDescription>
-                Upload is processed by the server and the URL is stored on the Staff (teaching) section.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Current file:{' '}
-                <span className="font-mono text-xs">
-                  {getTeacherListUrlFromSections(mpdDraft.sections) || 'Not uploaded'}
-                </span>
-              </p>
-              <div className="flex flex-wrap gap-2 items-center">
-                <Button variant="outline" size="sm" type="button" onClick={downloadTeacherSampleCsv}>
-                  Download sample CSV
-                </Button>
-                <Input
-                  type="file"
-                  accept=".pdf,.csv,.xlsx,.xls"
-                  className="max-w-xs"
-                  onChange={handleTeacherListUpload}
-                  disabled={uploadingTeacherList}
-                />
-                {uploadingTeacherList ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Legal &amp; compliance meta</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-1">
-                <Label>Legal disclaimer footer (see CBSE Annex note)</Label>
-                <textarea
-                  className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]"
-                  value={mpdDraft.legalDisclaimer}
-                  onChange={(e) => setMpdDraft((p) => (!p ? p : { ...p, legalDisclaimer: e.target.value }))}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label>Compliance deadline (YYYY-MM-DD)</Label>
-                  <Input
-                    value={mpdDraft.complianceDeadline}
-                    onChange={(e) => setMpdDraft((p) => (!p ? p : { ...p, complianceDeadline: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Directive reference (display)</Label>
-                  <Input
-                    value={mpdDraft.directiveReference}
-                    onChange={(e) => setMpdDraft((p) => (!p ? p : { ...p, directiveReference: e.target.value }))}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="border-t pt-6 mt-2 space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-school-secondary px-1">Document uploads &amp; portal rows</h2>
-              <p className="text-sm text-muted-foreground px-1 mt-1">
-                PDF rows for each category (B / C / E, etc.) appear on the public page. Categories are defined in{' '}
-                <strong>document list</strong> sections in the builder above; here you add rows, reorder, upload files,
-                and toggle visibility.
-              </p>
-            </div>
-
+        <MpdDisclosureWizard
+          mpdDraft={mpdDraft}
+          mpdUpdatedAt={mpdUpdatedAt}
+          mpdSaving={mpdSaving}
+          complianceDaysRemaining={dl}
+          teacherListUrl={getTeacherListUrlFromSections(mpdDraft.sections)}
+          uploadingTeacherList={uploadingTeacherList}
+          docCounts={docCountsByCategory}
+          onSave={() => void saveMpdAdminPayload()}
+          onSectionsChange={(next) => setMpdDraft((p) => (p ? { ...p, sections: next } : p))}
+          onLegalChange={(patch) => setMpdDraft((p) => (p ? { ...p, ...patch } : p))}
+          onTeacherListUpload={handleTeacherListUpload}
+          onDownloadTeacherSample={downloadTeacherSampleCsv}
+          renderDocuments={() => (
+            <>
           {/* Header */}
           <Card>
             <CardHeader>
@@ -2477,8 +2366,9 @@ const Backend = () => {
             );
           })}
           </Accordion>
-          </div>
-        </div>
+            </>
+          )}
+        />
       );
     }
 

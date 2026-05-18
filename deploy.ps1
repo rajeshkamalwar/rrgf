@@ -1,6 +1,7 @@
 # See HOSTINGER_DEPLOY.md for full deploy documentation.
 $SSH_USER = "u791315918"
-$SSH_HOST = "rrgreenfieldmadhepura.in"
+# Use IPv4 IP — hostname often hits IPv6 where port 65002 times out
+$SSH_HOST = "195.35.46.126"
 $SSH_PORT = "65002"
 $KEY_PATH = "$env:USERPROFILE\.ssh\rrgf_deploy"
 $SCRIPT   = "c:\Users\ASUS\Desktop\RRGF Mandatory Disclosure\deploy.sh"

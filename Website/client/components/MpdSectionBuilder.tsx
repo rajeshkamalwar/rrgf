@@ -185,9 +185,22 @@ export interface MpdSectionBuilderProps {
   sections: MpdSection[];
   onChange: (sections: MpdSection[]) => void;
   docCounts?: Record<string, number>;
+  /** When set, only these sections are shown (indices still refer to full `sections`). */
+  sectionFilter?: (s: MpdSection) => boolean;
+  /** Hide add-section controls and technical ids — for step-by-step wizard. */
+  simpleMode?: boolean;
 }
 
-export function MpdSectionBuilder({ sections, onChange, docCounts }: MpdSectionBuilderProps) {
+export function MpdSectionBuilder({
+  sections,
+  onChange,
+  docCounts,
+  sectionFilter,
+  simpleMode = false,
+}: MpdSectionBuilderProps) {
+  const visible = sectionFilter
+    ? sections.map((s, idx) => ({ s, idx })).filter(({ s }) => sectionFilter(s))
+    : sections.map((s, idx) => ({ s, idx }));
   const updateAt = useCallback(
     (idx: number, patch: Partial<MpdSection>) => {
       const next = sections.map((s, i) => (i === idx ? { ...s, ...patch } : s));
@@ -242,6 +255,7 @@ export function MpdSectionBuilder({ sections, onChange, docCounts }: MpdSectionB
 
   return (
     <div className="space-y-4">
+      {!simpleMode ? (
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
@@ -267,9 +281,14 @@ export function MpdSectionBuilder({ sections, onChange, docCounts }: MpdSectionB
           </div>
         </CardHeader>
       </Card>
+      ) : null}
 
-      <Accordion type="multiple" className="space-y-2">
-        {sections.map((sec, idx) => (
+      <Accordion
+        type="multiple"
+        className="space-y-2"
+        defaultValue={visible.map(({ s, idx }) => `${s.id}-${idx}`)}
+      >
+        {visible.map(({ s: sec, idx }) => (
           <AccordionItem
             key={`${sec.id}-${idx}`}
             value={`${sec.id}-${idx}`}
@@ -277,12 +296,16 @@ export function MpdSectionBuilder({ sections, onChange, docCounts }: MpdSectionB
           >
             <AccordionTrigger className="hover:no-underline py-3 gap-2 [&[data-state=open]]:pb-2">
               <div className="flex flex-1 flex-wrap items-center gap-2 text-left min-w-0">
-                <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-                <Badge variant="default" className="shrink-0 font-mono">
-                  {sec.letter || '?'}
-                </Badge>
+                {!simpleMode ? (
+                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                ) : null}
+                {!simpleMode ? (
+                  <Badge variant="default" className="shrink-0 font-mono">
+                    {sec.letter || '?'}
+                  </Badge>
+                ) : null}
                 <span className="font-semibold truncate">{sec.title}</span>
-                <Badge variant="outline">{sec.type}</Badge>
+                {!simpleMode ? <Badge variant="outline">{sec.type}</Badge> : null}
                 {!sec.visible ? (
                   <Badge variant="secondary">
                     <span className="sr-only">Hidden on public page</span> Hidden
@@ -294,6 +317,8 @@ export function MpdSectionBuilder({ sections, onChange, docCounts }: MpdSectionB
               </div>
             </AccordionTrigger>
             <AccordionContent className="space-y-4 pb-4">
+              {!simpleMode ? (
+                <>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" variant="outline" onClick={() => move(idx, -1)} disabled={idx === 0}>
                   <ArrowUp className="h-4 w-4" />
@@ -363,6 +388,8 @@ export function MpdSectionBuilder({ sections, onChange, docCounts }: MpdSectionB
                   </Select>
                 </div>
               </div>
+                </>
+              ) : null}
 
               {sec.type === 'table' ? (
                 <div className="space-y-6">
