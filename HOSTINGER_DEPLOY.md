@@ -72,7 +72,19 @@ The script:
 2. **Rsyncs only** `DEPLOYMENT_PACKAGE/public_html/` → `~/domains/rrgreenfieldmadhepura.in/public_html/` (not all of `~/public_html/`)  
 4. **Preserves** existing `database.local.php` on LIVE  
 5. **Does not overwrite** `php-backend/uploads/` on LIVE (server uploads kept)  
-6. Verifies `api/index.php` size and runs login `curl` test  
+6. **Does not reset MySQL** — deploy only replaces PHP/JS files; your database rows stay in Hostinger MySQL unless you run `schema.sql` / reset scripts yourself  
+7. **Preserves** `database.local.php` (credentials file on disk — if missing after deploy, login returns 500 until you recreate it)  
+8. Verifies `api/index.php` size and runs login `curl` test  
+
+### Git deploy does NOT wipe your database
+
+| What deploy changes | What deploy does **not** touch |
+|---------------------|--------------------------------|
+| Files under `domains/rrgreenfieldmadhepura.in/public_html/` | MySQL tables (`documents`, `mpd_disclosure`, `admin_sessions`, etc.) |
+| Removes stray folders wrongly copied to LIVE (`--delete` vs package only) | `database.local.php` content if backup existed (script restores it) |
+| | `php-backend/uploads/` (protected + excluded) |
+
+If login breaks after deploy with `Access denied for user 'root'`, **`database.local.php` was missing on LIVE** — recreate it in hPanel (see below). That is **not** the same as emptying MySQL.  
 
 ---
 
@@ -170,6 +182,8 @@ npm run dev
 | Empty HTTP 500 on `/api/*` | Old `api/index.php` or BOM in config | Deploy full `index.php` (~10067 bytes); use `ob_start` / `ob_end_clean` |
 | `grep ob_start` = 0 on server | Wrong file or wrong path | Edit `domains/.../php-backend/api/index.php`, not only `~/public_html` |
 | Login works in CLI, not web | Deployed only to `~/public_html` | Sync to `domains/.../public_html` |
+| 500 login, `root` / no password | `database.local.php` missing on LIVE | Create `php-backend/config/database.local.php` on LIVE (hPanel MySQL credentials); redeploy restores if backup exists |
+| “Database reset” after git deploy | Usually credentials file lost, not MySQL emptied | Check phpMyAdmin — tables still there; fix `database.local.php` |
 | File Manager upload stuck at 9215 bytes | Old file cached / wrong folder | Delete file, re-upload, or use `git clone` + `deploy.sh` |
 
 ---

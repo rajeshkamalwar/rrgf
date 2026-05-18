@@ -24,18 +24,28 @@ if [ ! -d "$PKG" ]; then
   exit 1
 fi
 
-# Preserve LIVE database credentials before rsync
+# Preserve database.local.php (never in git). MySQL data is NOT touched by deploy — only this file.
 DB_LOCAL="$LIVE/php-backend/config/database.local.php"
 DB_BACKUP=""
-if [ -f "$DB_LOCAL" ]; then
-  DB_BACKUP="$(mktemp)"
-  cp -a "$DB_LOCAL" "$DB_BACKUP"
-  echo "Backed up database.local.php"
-fi
+for CAND in \
+  "$DB_LOCAL" \
+  "$HOME/public_html/php-backend/config/database.local.php" \
+  "$HOME/domains/rrgreenfieldmadhepura.in/public_html/php-backend/config/database.local.php"
+do
+  if [ -f "$CAND" ]; then
+    DB_BACKUP="$(mktemp)"
+    cp -a "$CAND" "$DB_BACKUP"
+    echo "Backed up database.local.php from: $CAND"
+    break
+  fi
+done
 
 echo "=== Sync RRGF package only → LIVE ($LIVE) ==="
+echo "    (MySQL tables are never dropped or reset by this script — only files on disk.)"
 mkdir -p "$LIVE"
 rsync -av --delete \
+  --filter='protect php-backend/config/database.local.php' \
+  --filter='protect php-backend/uploads/' \
   --exclude='php-backend/config/database.local.php' \
   --exclude='php-backend/uploads/' \
   "$PKG/" "$LIVE/"
