@@ -118,7 +118,7 @@ function isMandatoryDocHidden(doc: Document): boolean {
   return h === true || h === 1 || h === '1';
 }
 
-type View = 'smtp' | 'mpd-appendix' | 'documents' | 'hero-images' | 'gallery' | 'graph-api';
+type View = 'smtp' | 'mpd-appendix' | 'hero-images' | 'gallery' | 'graph-api';
 
 type MpdPayload = MpdPayloadV2;
 
@@ -271,14 +271,6 @@ const Backend = () => {
     });
   };
 
-  // Load documents when authenticated and on documents view
-  useEffect(() => {
-    if (isAuthenticated && currentView === 'documents') {
-      loadDocuments();
-      loadMpdAdminPayload();
-    }
-  }, [isAuthenticated, currentView]);
-
   // Load hero images when authenticated and on hero-images view
   useEffect(() => {
     if (isAuthenticated && currentView === 'hero-images') {
@@ -303,6 +295,7 @@ const Backend = () => {
   useEffect(() => {
     if (isAuthenticated && currentView === 'mpd-appendix') {
       loadMpdAdminPayload();
+      loadDocuments();
     }
   }, [isAuthenticated, currentView]);
 
@@ -2022,13 +2015,17 @@ const Backend = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
-      );
-    }
 
-    if (currentView === 'documents') {
-      return (
-        <div className="space-y-6">
+          <div className="border-t pt-6 mt-2 space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold text-school-secondary px-1">Document uploads &amp; portal rows</h2>
+              <p className="text-sm text-muted-foreground px-1 mt-1">
+                PDF rows for each category (B / C / E, etc.) appear on the public page. Categories are defined in{' '}
+                <strong>document list</strong> sections in the builder above; here you add rows, reorder, upload files,
+                and toggle visibility.
+              </p>
+            </div>
+
           {/* Header */}
           <Card>
             <CardHeader>
@@ -2036,7 +2033,7 @@ const Backend = () => {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="h-5 w-5" />
-                    Mandatory Disclosure Documents
+                    Mandatory disclosure documents
                   </CardTitle>
                   <CardDescription className="mt-1">
                     Drag ⠿ to reorder · Click ✏ to rename · Toggle to show/hide on public page · Delete removes the row permanently.
@@ -2147,13 +2144,13 @@ const Backend = () => {
                   })()}
                   <div className="flex items-center gap-2 sm:col-span-2">
                     <Checkbox
-                      id="auto-map-seg"
+                      id="auto-map-seg-mpd"
                       checked={newDoc.auto_map_segment}
                       onCheckedChange={(checked) =>
                         setNewDoc((p) => ({ ...p, auto_map_segment: Boolean(checked) }))
                       }
                     />
-                    <Label htmlFor="auto-map-seg" className="text-sm font-normal">
+                    <Label htmlFor="auto-map-seg-mpd" className="text-sm font-normal">
                       Auto-map segment from title keywords
                     </Label>
                   </div>
@@ -2198,7 +2195,7 @@ const Backend = () => {
               <AccordionTrigger className="hover:no-underline py-3">
                 <div className="flex items-center gap-2 text-left">
                   <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-semibold">Document categories &amp; segments</span>
+                  <span className="font-semibold">Document categories &amp; segments (bulk)</span>
                   <Badge variant="secondary">{docSections.length}</Badge>
                 </div>
               </AccordionTrigger>
@@ -2480,6 +2477,7 @@ const Backend = () => {
             );
           })}
           </Accordion>
+          </div>
         </div>
       );
     }
@@ -3319,15 +3317,7 @@ const Backend = () => {
             onClick={() => setCurrentView('mpd-appendix')}
           >
             <ClipboardList className="mr-2 h-4 w-4" />
-            Appendix‑IX MPD Data
-          </Button>
-          <Button
-            variant={currentView === 'documents' ? 'default' : 'ghost'}
-            className="w-full justify-start"
-            onClick={() => setCurrentView('documents')}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            Documents
+            Mandatory disclosure
           </Button>
           <Button
             variant={currentView === 'hero-images' ? 'default' : 'ghost'}
@@ -3381,31 +3371,27 @@ const Backend = () => {
                 {currentView === 'smtp'
                   ? 'SMTP Configuration'
                   : currentView === 'mpd-appendix'
-                    ? 'CBSE Appendix‑IX MPD'
-                    : currentView === 'documents'
-                      ? 'Document Management'
-                      : currentView === 'hero-images'
-                        ? 'Hero Images Management'
-                        : currentView === 'gallery'
-                          ? 'Gallery Management'
-                          : currentView === 'graph-api'
-                            ? 'Graph API Configuration'
-                            : 'Admin Panel'}
+                    ? 'Mandatory disclosure'
+                    : currentView === 'hero-images'
+                      ? 'Hero Images Management'
+                      : currentView === 'gallery'
+                        ? 'Gallery Management'
+                        : currentView === 'graph-api'
+                          ? 'Graph API Configuration'
+                          : 'Admin Panel'}
               </h1>
               <p className="text-sm text-muted-foreground">
                 {currentView === 'smtp'
                   ? 'Manage email settings'
                   : currentView === 'mpd-appendix'
-                    ? 'General info, staff, infrastructure, Class X/XII results — drives /mandatory-public-disclosure'
-                    : currentView === 'documents'
-                      ? 'Upload PDF rows for Annex B supporting documents'
-                      : currentView === 'hero-images'
-                        ? 'Manage hero slider images for the home page'
-                        : currentView === 'gallery'
-                          ? 'Manage gallery images from OneDrive'
-                          : currentView === 'graph-api'
-                            ? 'Configure Microsoft Graph API for automatic image fetching'
-                            : 'Admin Panel'}
+                    ? 'Appendix‑IX sections, SAVE DATA, teacher list, legal meta, and document rows / PDF uploads for each category'
+                    : currentView === 'hero-images'
+                      ? 'Manage hero slider images for the home page'
+                      : currentView === 'gallery'
+                        ? 'Manage gallery images from OneDrive'
+                        : currentView === 'graph-api'
+                          ? 'Configure Microsoft Graph API for automatic image fetching'
+                          : 'Admin Panel'}
               </p>
             </div>
           </div>
