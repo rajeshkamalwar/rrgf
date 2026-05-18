@@ -513,9 +513,9 @@ const MandatoryDisclosure = () => {
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-semibold">SL NO.</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold">YEAR</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold">REGISTERED</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold">PASSED</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold">PASS %</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold">NO. OF REGISTERED STUDENTS</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold">NO. OF STUDENTS PASSED</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold">PASS PERCENTAGE</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold">REMARKS</th>
               </tr>
             </thead>
@@ -523,15 +523,16 @@ const MandatoryDisclosure = () => {
               {outcome.rows.map((rw, idx) => {
                 const reg = Number(rw.registered) || 0;
                 const pas = Number(rw.passed) || 0;
-                const computed = outcome.doesNotOffer ? 'NA' : passPercent(reg, pas);
+                const placeholder = outcome.doesNotOffer;
+                const computed = placeholder ? '00' : passPercent(reg, pas);
                 return (
                   <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                     <td className="px-4 py-3 text-sm font-medium">{idx + 1}</td>
-                    <td className="px-4 py-3 text-sm">{outcome.doesNotOffer ? '—' : yearDisplay(rw.year)}</td>
-                    <td className="px-4 py-3 text-sm">{outcome.doesNotOffer ? '—' : reg || '—'}</td>
-                    <td className="px-4 py-3 text-sm">{outcome.doesNotOffer ? '—' : pas || '—'}</td>
+                    <td className="px-4 py-3 text-sm">{placeholder ? '0000' : yearDisplay(rw.year)}</td>
+                    <td className="px-4 py-3 text-sm">{placeholder ? '00' : (reg || '00')}</td>
+                    <td className="px-4 py-3 text-sm">{placeholder ? '00' : (pas || '00')}</td>
                     <td className="px-4 py-3 text-sm font-medium">{computed}</td>
-                    <td className="px-4 py-3 text-sm">{rw.remarks || outcome.remark || '—'}</td>
+                    <td className="px-4 py-3 text-sm">{rw.remarks || outcome.remark || 'NA'}</td>
                   </tr>
                 );
               })}
