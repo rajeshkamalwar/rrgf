@@ -15,15 +15,10 @@ Hostinger uses a **live web root** that is not always the same as `~/public_html
 
 | Path | Role |
 |------|------|
-| `~/domains/rrgreenfieldmadhepura.in/public_html/` | **LIVE** — PHP/Apache serves the site from here |
-| `~/public_html/` | Copy/staging — files here are **not** used unless synced to `domains/...` |
+| `~/domains/rrgreenfieldmadhepura.in/public_html/` | **LIVE** — PHP/Apache serves the school site from here |
+| `~/public_html/` | **Other sites on your account** — do **not** rsync this folder to RRGF LIVE |
 
-**Always deploy to LIVE.** After any upload or `git clone` to `~/public_html`, sync to domains:
-
-```bash
-LIVE=~/domains/rrgreenfieldmadhepura.in/public_html
-rsync -av ~/public_html/ "$LIVE/"
-```
+**Always deploy to LIVE only.** `deploy.sh` rsyncs **only** `DEPLOYMENT_PACKAGE/public_html/` from the git clone into `domains/rrgreenfieldmadhepura.in/public_html/`. It does **not** copy your whole `~/public_html/` (that would pull in `enchanting`, `gandhiasian`, etc.).
 
 If only `api/index.php` is updated on LIVE but `php-backend/services/` is missing, the API returns 500 (`Database.php` not found). Deploy the **full** `public_html` tree, especially all of `php-backend/`.
 
@@ -74,8 +69,7 @@ bash temp_deploy/deploy.sh
 The script:
 
 1. Clones latest `main` from GitHub  
-2. Copies `DEPLOYMENT_PACKAGE/public_html/` to `~/public_html/`  
-3. **Rsyncs to** `~/domains/rrgreenfieldmadhepura.in/public_html/`  
+2. **Rsyncs only** `DEPLOYMENT_PACKAGE/public_html/` → `~/domains/rrgreenfieldmadhepura.in/public_html/` (not all of `~/public_html/`)  
 4. **Preserves** existing `database.local.php` on LIVE  
 5. **Does not overwrite** `php-backend/uploads/` on LIVE (server uploads kept)  
 6. Verifies `api/index.php` size and runs login `curl` test  
