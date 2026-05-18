@@ -340,6 +340,15 @@ export interface MpdSectionField {
   type: MpdSectionFieldType;
   hint?: string;
   linkable?: boolean;
+  /** When set, row appears under this group (see `tableGroups` on the same section). */
+  groupId?: string;
+}
+
+/** Sub-heading block for key/value (`table`) sections — `fields[].groupId` references `id`. */
+export interface MpdTableRowGroup {
+  id: string;
+  title: string;
+  sortOrder: number;
 }
 
 export interface MpdResultYearRow {
@@ -375,6 +384,8 @@ export interface MpdSection {
   youtubeInspectionUrl?: string;
   infraDocLink?: string;
   content?: string;
+  /** Optional row groups for `type: 'table'` only */
+  tableGroups?: MpdTableRowGroup[];
 }
 
 export interface MpdPayloadV2 {
@@ -725,6 +736,82 @@ export function createDefaultMpdPayloadV2(): MpdPayloadV2 {
   return migratePayloadV1toV2(v1);
 }
 
+function normalizeTableRowGroup(g: unknown, idx: number): MpdTableRowGroup {
+  if (!g || typeof g !== 'object') {
+    return { id: `group_${idx + 1}`, title: 'Group', sortOrder: idx + 1 };
+  }
+  const o = g as Record<string, unknown>;
+  const rawId = String(o.id ?? `group_${idx + 1}`).trim();
+  const id = slugifySectionId(rawId) || `group_${idx + 1}`;
+  return {
+    id,
+    title: String(o.title ?? '').trim() || id,
+    sortOrder: Number(o.sortOrder ?? idx + 1) || idx + 1,
+  };
+}
+
+/** Parse and repair `tableGroups` from API/editor input. */
+export function normalizeTableGroups(raw: unknown): MpdTableRowGroup[] {
+  if (!Array.isArray(raw)) return [];
+  const items = raw.map((g, i) => normalizeTableRowGroup(g, i));
+  items.sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
+  const seen = new Set<string>();
+  return items.map((g) => {
+    let id = g.id;
+    if (seen.has(id)) {
+      let n = 2;
+      let candidate = `${g.id}_${n}`;
+      while (seen.has(candidate)) {
+        n += 1;
+        candidate = `${g.id}_${n}`;
+      }
+      id = candidate;
+    }
+    seen.add(id);
+    return { ...g, id };
+  });
+}
+
+export type MpdTableRenderItem =
+  | { kind: 'header'; key: string; title: string }
+  | { kind: 'row'; field: MpdSectionField; serialNo: number };
+
+/**
+ * Expand flat `fields` with optional group headers for public rendering.
+ * S.No applies only to `row` items (headers do not consume a serial).
+ */
+export function buildTableRenderRows(
+  fields: MpdSectionField[],
+  tableGroups: MpdTableRowGroup[] | undefined,
+): MpdTableRenderItem[] {
+  const groups = tableGroups ?? [];
+  const titleById = new Map(groups.map((g) => [g.id, g.title]));
+  const validIds = new Set(titleById.keys());
+  const out: MpdTableRenderItem[] = [];
+  let prevEffective: string | undefined;
+  let serial = 0;
+
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    const raw = field.groupId?.trim();
+    const effective = raw && validIds.has(raw) ? raw : undefined;
+
+    if (effective && effective !== prevEffective) {
+      out.push({
+        kind: 'header',
+        key: `grp-${effective}-${i}`,
+        title: titleById.get(effective) ?? effective,
+      });
+    }
+
+    serial += 1;
+    out.push({ kind: 'row', field, serialNo: serial });
+    prevEffective = effective;
+  }
+
+  return out;
+}
+
 function normalizeSectionField(f: unknown, fallbackId: string): MpdSectionField {
   if (!f || typeof f !== 'object') {
     return { id: fallbackId, label: '', value: '', type: 'text' };
@@ -733,7 +820,9 @@ function normalizeSectionField(f: unknown, fallbackId: string): MpdSectionField 
   const id = slugifySectionId(String(r.id ?? fallbackId)) || fallbackId;
   const type = (String(r.type ?? 'text') as MpdSectionFieldType) || 'text';
   const allowed: MpdSectionFieldType[] = ['text', 'url', 'email', 'phone', 'address', 'number', 'boolean'];
-  return {
+  const groupRaw = r.groupId !== undefined && r.groupId !== null ? String(r.groupId).trim() : '';
+  const groupId = groupRaw ? slugifySectionId(groupRaw) : undefined;
+  const base: MpdSectionField = {
     id,
     label: String(r.label ?? '').trim(),
     value: String(r.value ?? ''),
@@ -741,6 +830,10 @@ function normalizeSectionField(f: unknown, fallbackId: string): MpdSectionField 
     hint: r.hint !== undefined ? String(r.hint) : undefined,
     linkable: r.linkable === true,
   };
+  if (groupId) {
+    base.groupId = groupId;
+  }
+  return base;
 }
 
 function normalizeResultClass(c: unknown, idx: number): MpdResultClass {
@@ -810,7 +903,19 @@ export function normalizeMpdSection(sec: unknown, index: number): MpdSection {
     visible: r.visible !== false,
   };
   if (base.type === 'table' && Array.isArray(r.fields)) {
-    base.fields = r.fields.map((f, i) => normalizeSectionField(f, `field_${i + 1}`));
+    const tableGroups = normalizeTableGroups(r.tableGroups);
+    const valid = new Set(tableGroups.map((g) => g.id));
+    if (tableGroups.length) {
+      base.tableGroups = tableGroups;
+    }
+    base.fields = r.fields.map((f, i) => {
+      const fld = normalizeSectionField(f, `field_${i + 1}`);
+      if (fld.groupId && !valid.has(fld.groupId)) {
+        const { groupId, ...rest } = fld;
+        return rest;
+      }
+      return fld;
+    });
   }
   if (base.type === 'document_list') {
     const rawSeg = Array.isArray(r.segments) ? r.segments : [];

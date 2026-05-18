@@ -35,6 +35,7 @@ import type {
   MpdSectionField,
   MpdSectionFieldType,
   MpdSectionType,
+  MpdTableRowGroup,
 } from '@/lib/mpdDocumentSections';
 import {
   slugifySectionId,
@@ -364,10 +365,28 @@ export function MpdSectionBuilder({ sections, onChange, docCounts }: MpdSectionB
               </div>
 
               {sec.type === 'table' ? (
-                <FieldRowsEditor
-                  fields={sec.fields ?? []}
-                  onChange={(fields) => updateAt(idx, { fields })}
-                />
+                <div className="space-y-6">
+                  <TableRowGroupsEditor
+                    groups={sec.tableGroups ?? []}
+                    onChange={(tableGroups) => {
+                      const next = tableGroups.length ? tableGroups : undefined;
+                      const valid = new Set((next ?? []).map((g) => g.id));
+                      const fields = (sec.fields ?? []).map((f) => {
+                        if (f.groupId && !valid.has(f.groupId)) {
+                          const { groupId, ...rest } = f;
+                          return rest;
+                        }
+                        return f;
+                      });
+                      updateAt(idx, { tableGroups: next, fields });
+                    }}
+                  />
+                  <FieldRowsEditor
+                    fields={sec.fields ?? []}
+                    onChange={(fields) => updateAt(idx, { fields })}
+                    groupChoices={(sec.tableGroups ?? []).map((g) => ({ id: g.id, title: g.title }))}
+                  />
+                </div>
               ) : null}
 
               {sec.type === 'document_list' ? (
@@ -468,12 +487,119 @@ function sectionToDocCategory(sec: MpdSection): MpdDocumentSection {
   };
 }
 
+const NONE_GROUP = '__none__';
+
+function TableRowGroupsEditor(props: {
+  groups: MpdTableRowGroup[];
+  onChange: (groups: MpdTableRowGroup[]) => void;
+}) {
+  const { groups, onChange } = props;
+
+  const setGroups = (next: MpdTableRowGroup[]) => {
+    onChange(next.map((g, i) => ({ ...g, sortOrder: i + 1 })));
+  };
+
+  const updateGroup = (i: number, patch: Partial<MpdTableRowGroup>) => {
+    setGroups(
+      groups.map((g, j) => {
+        if (j !== i) return g;
+        const merged = { ...g, ...patch };
+        if (patch.id !== undefined) {
+          merged.id = slugifySectionId(String(patch.id)) || g.id;
+        }
+        return merged;
+      }),
+    );
+  };
+
+  const removeGroup = (i: number) => {
+    setGroups(groups.filter((_, j) => j !== i));
+  };
+
+  const moveGroup = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= groups.length) return;
+    const copy = [...groups];
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+    setGroups(copy);
+  };
+
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+      <div>
+        <Label className="text-sm font-medium">Row groups (sub-headings)</Label>
+        <p className="text-xs text-muted-foreground mt-1">
+          Optional. Add a group, then assign field rows to it below. Titles appear as full-width
+          heading rows on the public page.
+        </p>
+      </div>
+      {groups.map((g, i) => (
+        <Card key={g.id} className="border-dashed">
+          <CardContent className="pt-4 grid gap-2 sm:grid-cols-12 items-end">
+            <div className="sm:col-span-4 space-y-1">
+              <Label className="text-xs">Sub-heading title</Label>
+              <Input value={g.title} onChange={(e) => updateGroup(i, { title: e.target.value })} />
+            </div>
+            <div className="sm:col-span-3 space-y-1">
+              <Label className="text-xs">Group id (slug)</Label>
+              <Input value={g.id} onChange={(e) => updateGroup(i, { id: e.target.value })} />
+            </div>
+            <div className="sm:col-span-5 flex flex-wrap gap-2 justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => moveGroup(i, -1)}
+                disabled={i === 0}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => moveGroup(i, 1)}
+                disabled={i >= groups.length - 1}
+              >
+                <ArrowDown className="h-4 w-4" />
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => removeGroup(i)}>
+                <Trash2 className="h-4 w-4 mr-1" /> Remove
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          setGroups([
+            ...groups,
+            {
+              id: newId('group'),
+              title: 'New group',
+              sortOrder: groups.length + 1,
+            },
+          ])
+        }
+      >
+        <Plus className="h-4 w-4 mr-1" /> Add row group
+      </Button>
+    </div>
+  );
+}
+
 function FieldRowsEditor(props: {
   fields: MpdSectionField[];
   onChange: (fields: MpdSectionField[]) => void;
   valueLabel?: string;
+  /** When set, show a per-row group dropdown (key/value table sections). */
+  groupChoices?: { id: string; title: string }[];
 }) {
-  const { fields, onChange, valueLabel = 'Value' } = props;
+  const { fields, onChange, valueLabel = 'Value', groupChoices } = props;
+  const showGroup = groupChoices !== undefined;
 
   const updateField = (i: number, patch: Partial<MpdSectionField>) => {
     onChange(
@@ -486,11 +612,11 @@ function FieldRowsEditor(props: {
       {fields.map((f, i) => (
         <Card key={f.id} className="border-dashed">
           <CardContent className="pt-4 grid gap-2 sm:grid-cols-12 items-end">
-            <div className="sm:col-span-4 space-y-1">
+            <div className={showGroup ? 'sm:col-span-3 space-y-1' : 'sm:col-span-4 space-y-1'}>
               <Label className="text-xs">Label</Label>
               <Input value={f.label} onChange={(e) => updateField(i, { label: e.target.value })} />
             </div>
-            <div className="sm:col-span-3 space-y-1">
+            <div className={showGroup ? 'sm:col-span-2 space-y-1' : 'sm:col-span-3 space-y-1'}>
               <Label className="text-xs">Field id (slug)</Label>
               <Input
                 value={f.id}
@@ -515,7 +641,34 @@ function FieldRowsEditor(props: {
                 </SelectContent>
               </Select>
             </div>
-            <div className="sm:col-span-3 space-y-1">
+            {showGroup ? (
+              <div className="sm:col-span-2 space-y-1">
+                <Label className="text-xs">Group</Label>
+                <Select
+                  value={
+                    f.groupId && (groupChoices ?? []).some((x) => x.id === f.groupId)
+                      ? f.groupId
+                      : NONE_GROUP
+                  }
+                  onValueChange={(v) =>
+                    updateField(i, { groupId: v === NONE_GROUP ? undefined : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_GROUP}>(None)</SelectItem>
+                    {(groupChoices ?? []).map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.title || g.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <div className={showGroup ? 'sm:col-span-3 space-y-1' : 'sm:col-span-3 space-y-1'}>
               <Label className="text-xs">{valueLabel}</Label>
               {f.type === 'boolean' ? (
                 <div className="flex items-center gap-2 h-10">
@@ -549,12 +702,19 @@ function FieldRowsEditor(props: {
         type="button"
         variant="outline"
         size="sm"
-        onClick={() =>
+        onClick={() => {
+          const last = fields[fields.length - 1];
+          const base: MpdSectionField = {
+            id: newId('field'),
+            label: 'New field',
+            value: '',
+            type: 'text',
+          };
           onChange([
             ...fields,
-            { id: newId('field'), label: 'New field', value: '', type: 'text' },
-          ])
-        }
+            showGroup && last?.groupId ? { ...base, groupId: last.groupId } : base,
+          ]);
+        }}
       >
         <Plus className="h-4 w-4 mr-1" /> Add row
       </Button>

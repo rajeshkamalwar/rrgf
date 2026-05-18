@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import type { MpdDocumentSection, MpdSection, MpdSectionField } from '@/lib/mpdDocumentSections';
-import { groupDocsBySegment, sortDisclosureDocs } from '@/lib/mpdDocumentSections';
+import { buildTableRenderRows, groupDocsBySegment, sortDisclosureDocs } from '@/lib/mpdDocumentSections';
 import {
   DisclosureDocLink,
   documentHref,
@@ -194,6 +194,8 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
   switch (section.type) {
     case 'table': {
       const fields = section.fields ?? [];
+      const tableGroups = section.tableGroups;
+      const rows = buildTableRenderRows(fields, tableGroups);
       return (
         <Card>
           <div className="overflow-x-auto">
@@ -206,15 +208,31 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {fields.map((row, index) => (
-                  <tr key={row.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-6 py-4 text-sm font-medium text-school-secondary">{index + 1}</td>
-                    <td className="px-6 py-4 text-sm text-school-secondary">{row.label}</td>
-                    <td className="px-6 py-4 text-sm text-school-secondary font-medium">
-                      {renderTableValue(row)}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((item) =>
+                  item.kind === 'header' ? (
+                    <tr key={item.key} className="bg-school-primary/10">
+                      <td
+                        colSpan={3}
+                        className="px-6 py-3 text-sm font-semibold text-school-secondary uppercase tracking-wide"
+                      >
+                        {item.title}
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr
+                      key={`${item.field.id}-${item.serialNo}`}
+                      className={item.serialNo % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+                    >
+                      <td className="px-6 py-4 text-sm font-medium text-school-secondary">
+                        {item.serialNo}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-school-secondary">{item.field.label}</td>
+                      <td className="px-6 py-4 text-sm text-school-secondary font-medium">
+                        {renderTableValue(item.field)}
+                      </td>
+                    </tr>
+                  ),
+                )}
               </tbody>
             </table>
           </div>

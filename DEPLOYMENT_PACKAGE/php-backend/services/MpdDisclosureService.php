@@ -739,8 +739,13 @@ class MpdDisclosureService
             'type' => $type,
             'visible' => !array_key_exists('visible', $sec) || $sec['visible'] !== false,
         ];
-        if ($type === 'table' && !empty($sec['fields']) && is_array($sec['fields'])) {
-            $base['fields'] = $sec['fields'];
+        if ($type === 'table') {
+            if (!empty($sec['fields']) && is_array($sec['fields'])) {
+                $base['fields'] = $sec['fields'];
+            }
+            if (array_key_exists('tableGroups', $sec) && is_array($sec['tableGroups'])) {
+                $base['tableGroups'] = $sec['tableGroups'];
+            }
         }
         if ($type === 'document_list') {
             $wrapped = self::normalizeDocumentSections([
