@@ -1,1 +1,3 @@
 *.zip
+# Server-only credential override – never commit this
+**/database.local.php

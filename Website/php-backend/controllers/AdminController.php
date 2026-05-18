@@ -27,17 +27,21 @@ class AdminController {
      * POST /api/admin/login
      */
     public function login() {
-        $data = Request::jsonBody();
+        try {
+            $data = Request::jsonBody();
 
-        if (empty($data['username']) || empty($data['password'])) {
-            Response::error('Username and password are required');
-        }
-        
-        if ($this->auth->verifyCredentials($data['username'], $data['password'])) {
-            $sessionId = $this->auth->createSession();
-            Response::success(['sessionId' => $sessionId]);
-        } else {
-            Response::error('Invalid credentials', 401);
+            if (empty($data['username']) || empty($data['password'])) {
+                Response::error('Username and password are required');
+            }
+
+            if ($this->auth->verifyCredentials($data['username'], $data['password'])) {
+                $sessionId = $this->auth->createSession();
+                Response::success(['sessionId' => $sessionId]);
+            } else {
+                Response::error('Invalid credentials', 401);
+            }
+        } catch (\Throwable $e) {
+            Response::error('Login error: ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine(), 500);
         }
     }
     
