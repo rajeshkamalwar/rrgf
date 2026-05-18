@@ -13,14 +13,14 @@
   RewriteCond %{REQUEST_FILENAME} -f
   RewriteRule . - [L]
   
-  # Handle React Router - serve index.html for all non-file/non-directory requests
+  # Handle React Router - serve index.php (PHP bypasses LiteSpeed static cache)
   # Exclude API, assets, and all file extensions (some hosts omit leading slash in REQUEST_URI)
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteCond %{REQUEST_URI} !^/?api(/|$) [NC]
   RewriteCond %{REQUEST_URI} !^/assets/
   RewriteCond %{REQUEST_URI} !\.(css|js|jpg|jpeg|png|gif|svg|ico|pdf|woff|woff2|ttf|eot|webp)$ [NC]
-  RewriteRule . /index.html [L]
+  RewriteRule . /appentry.php [L]
 </IfModule>
 
 # Set correct MIME types for assets
@@ -48,6 +48,21 @@
   Header set X-XSS-Protection "1; mode=block"
   # Prevent MIME type sniffing
   Header set X-Content-Type-Options "nosniff"
+  # Never cache the SPA entry point
+  <FilesMatch "^(index\.html|index\.php|appentry\.php)$">
+    Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header always set Pragma "no-cache"
+    Header always set Expires "Thu, 01 Jan 1970 00:00:00 GMT"
+    Header always set X-LiteSpeed-Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+# Disable LiteSpeed cache for the SPA entry point (appentry.php + root)
+<IfModule LiteSpeed>
+  CacheDisable public /
+  CacheDisable public /index.html
+  CacheDisable public /index.php
+  CacheDisable public /appentry.php
 </IfModule>
 
 # Cache Control for static assets
