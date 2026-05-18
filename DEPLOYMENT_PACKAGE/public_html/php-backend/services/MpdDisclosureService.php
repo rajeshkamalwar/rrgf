@@ -10,6 +10,9 @@ class MpdDisclosureService
     private const RRGREEN_TEACHER_LIST_URL =
         'https://teams.microsoft.com/l/message/19:61637882c7c9415f8d997814ecca0102@thread.v2/1779111399666?context=%7B%22contextType%22%3A%22chat%22%7D';
 
+    private const MPD_YOUTUBE_INSPECTION_LABEL =
+        'LINK OF YOUTUBE VIDEO OF THE INSPECTION OF SCHOOL (INFRASTRUCTURE)';
+
     public static function tableExists($db): bool
     {
         try {
@@ -336,6 +339,13 @@ class MpdDisclosureService
                 'type' => 'number',
             ],
         ];
+        $ytValue = trim($yt) !== '' ? trim($yt) : 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV';
+        $fields[] = [
+            'id' => 'youtube_inspection',
+            'label' => self::MPD_YOUTUBE_INSPECTION_LABEL,
+            'value' => $ytValue,
+            'type' => 'url',
+        ];
         $teachersList = trim((string) ($i['teachersListUrl'] ?? ''));
         if ($teachersList !== '') {
             $fields[] = [
@@ -356,10 +366,70 @@ class MpdDisclosureService
         }
 
         return [
-            'fields' => $fields,
-            'youtube' => $yt,
+            'fields' => self::reorderInfraDisplayFields($fields, $ytValue),
+            'youtube' => $ytValue,
             'infraDocLink' => $doc,
         ];
+    }
+
+    /**
+     * CSV order: parameters 1–6, YouTube (7), Teachers list (8).
+     *
+     * @param array<int, array<string, mixed>> $fields
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function reorderInfraDisplayFields(array $fields, string $youtubeUrl): array
+    {
+        $coreIds = [
+            'campus_area_sq_mtr',
+            'classrooms',
+            'labs',
+            'internet_facility',
+            'girls_toilets',
+            'boys_toilets',
+        ];
+        $byId = [];
+        foreach ($fields as $f) {
+            if (is_array($f) && isset($f['id'])) {
+                $byId[(string) $f['id']] = $f;
+            }
+        }
+        $out = [];
+        foreach ($coreIds as $id) {
+            if (isset($byId[$id])) {
+                $out[] = $byId[$id];
+            }
+        }
+        $ytValue = trim($youtubeUrl) !== '' ? trim($youtubeUrl) : 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV';
+        $youtube = $byId['youtube_inspection'] ?? [
+            'id' => 'youtube_inspection',
+            'label' => self::MPD_YOUTUBE_INSPECTION_LABEL,
+            'value' => $ytValue,
+            'type' => 'url',
+        ];
+        if (trim((string) ($youtube['value'] ?? '')) === '') {
+            $youtube['value'] = $ytValue;
+        }
+        $tailIds = array_merge($coreIds, ['youtube_inspection', 'teachers_list', 'additional_facilities']);
+        foreach ($fields as $f) {
+            if (!is_array($f) || !isset($f['id'])) {
+                continue;
+            }
+            $id = (string) $f['id'];
+            if (!in_array($id, $tailIds, true)) {
+                $out[] = $f;
+            }
+        }
+        $out[] = $youtube;
+        if (isset($byId['teachers_list'])) {
+            $out[] = $byId['teachers_list'];
+        }
+        if (isset($byId['additional_facilities'])) {
+            $out[] = $byId['additional_facilities'];
+        }
+
+        return $out;
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -797,11 +867,14 @@ class MpdDisclosureService
             }
         }
         if ($type === 'infra_table') {
-            $base['youtubeInspectionUrl'] = self::sanitizeYoutubeInspectionUrl($sec['youtubeInspectionUrl'] ?? '');
-            $base['infraDocLink'] = (string) ($sec['infraDocLink'] ?? '');
-            if (!empty($sec['infraFields']) && is_array($sec['infraFields'])) {
-                $base['infraFields'] = $sec['infraFields'];
+            $yt = self::sanitizeYoutubeInspectionUrl($sec['youtubeInspectionUrl'] ?? '');
+            if ($yt === '') {
+                $yt = 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV';
             }
+            $base['youtubeInspectionUrl'] = $yt;
+            $base['infraDocLink'] = (string) ($sec['infraDocLink'] ?? '');
+            $rawFields = !empty($sec['infraFields']) && is_array($sec['infraFields']) ? $sec['infraFields'] : [];
+            $base['infraFields'] = self::reorderInfraDisplayFields($rawFields, $yt);
         }
         if ($type === 'freetext') {
             $base['content'] = (string) ($sec['content'] ?? '');

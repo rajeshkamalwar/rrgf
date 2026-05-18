@@ -485,6 +485,53 @@ function staffObjectToFields(staff: Record<string, unknown> | undefined): MpdSec
   return out;
 }
 
+export const MPD_YOUTUBE_INSPECTION_LABEL =
+  'LINK OF YOUTUBE VIDEO OF THE INSPECTION OF SCHOOL (INFRASTRUCTURE)';
+
+const INFRA_CORE_FIELD_IDS = [
+  'campus_area_sq_mtr',
+  'classrooms',
+  'labs',
+  'internet_facility',
+  'girls_toilets',
+  'boys_toilets',
+] as const;
+
+/** CSV order: parameters 1–6, then YouTube (7), then Teachers list (8). */
+export function reorderInfraDisplayFields(
+  fields: MpdSectionField[],
+  youtubeUrl: string
+): MpdSectionField[] {
+  const byId = new Map(fields.map((f) => [f.id, f]));
+  const core = INFRA_CORE_FIELD_IDS.map((id) => byId.get(id)).filter(
+    (f): f is MpdSectionField => Boolean(f)
+  );
+  const ytValue = youtubeUrl.trim() || RRGREEN_YOUTUBE_INSPECTION_URL;
+  const youtube: MpdSectionField = byId.get('youtube_inspection') ?? {
+    id: 'youtube_inspection',
+    label: MPD_YOUTUBE_INSPECTION_LABEL,
+    value: ytValue,
+    type: 'url',
+  };
+  if (!youtube.value.trim()) youtube.value = ytValue;
+  const teachers = byId.get('teachers_list');
+  const additional = byId.get('additional_facilities');
+  const tailIds = new Set<string>([
+    ...INFRA_CORE_FIELD_IDS,
+    'youtube_inspection',
+    'teachers_list',
+    'additional_facilities',
+  ]);
+  const rest = fields.filter((f) => !tailIds.has(f.id));
+  return [
+    ...core,
+    ...rest,
+    youtube,
+    ...(teachers ? [teachers] : []),
+    ...(additional ? [additional] : []),
+  ];
+}
+
 function infrastructureToFields(infra: Record<string, unknown> | undefined): {
   fields: MpdSectionField[];
   youtube: string;
@@ -531,6 +578,13 @@ function infrastructureToFields(infra: Record<string, unknown> | undefined): {
       type: 'number',
     },
   ];
+  const ytValue = yt.trim() || RRGREEN_YOUTUBE_INSPECTION_URL;
+  fields.push({
+    id: 'youtube_inspection',
+    label: MPD_YOUTUBE_INSPECTION_LABEL,
+    value: ytValue,
+    type: 'url',
+  });
   const teachersList = String(i.teachersListUrl ?? '').trim();
   if (teachersList) {
     fields.push({
@@ -549,7 +603,7 @@ function infrastructureToFields(infra: Record<string, unknown> | undefined): {
       type: 'text',
     });
   }
-  return { fields, youtube: yt, infraDocLink: doc };
+  return { fields, youtube: ytValue, infraDocLink: doc };
 }
 
 function migrateResultsToClasses(results: unknown): MpdResultClass[] {
@@ -925,9 +979,10 @@ export function normalizeMpdSection(sec: unknown, index: number): MpdSection {
     const yt = typeof r.youtubeInspectionUrl === 'string' ? r.youtubeInspectionUrl.trim() : '';
     base.youtubeInspectionUrl = yt || RRGREEN_YOUTUBE_INSPECTION_URL;
     base.infraDocLink = typeof r.infraDocLink === 'string' ? r.infraDocLink : '';
-    if (Array.isArray(r.infraFields)) {
-      base.infraFields = r.infraFields.map((f, i) => normalizeSectionField(f, `infra_${i + 1}`));
-    }
+    const rawFields = Array.isArray(r.infraFields)
+      ? r.infraFields.map((f, i) => normalizeSectionField(f, `infra_${i + 1}`))
+      : [];
+    base.infraFields = reorderInfraDisplayFields(rawFields, base.youtubeInspectionUrl);
   }
   if (base.type === 'freetext') {
     base.content = typeof r.content === 'string' ? r.content : '';

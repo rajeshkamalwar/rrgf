@@ -12,7 +12,7 @@ import {
   passPercent,
   yearDisplay,
 } from '@/lib/mpdPublicLinks';
-import { RRGREEN_TEACHER_LIST_URL, RRGREEN_YOUTUBE_INSPECTION_URL } from '@/lib/mpdRrgreenSeed';
+import { RRGREEN_YOUTUBE_INSPECTION_URL } from '@/lib/mpdRrgreenSeed';
 
 export interface MpdDocumentRow {
   id: string;
@@ -258,12 +258,69 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
     }
     case 'staff_table': {
       const fields = section.staffFields ?? [];
-      const pgt = Number(fields.find((f) => f.id === 'pgt')?.value ?? 0) || 0;
-      const tgt = Number(fields.find((f) => f.id === 'tgt')?.value ?? 0) || 0;
-      const prt = Number(fields.find((f) => f.id === 'prt')?.value ?? 0) || 0;
+      const teachingCountIds = new Set(['pgt', 'tgt', 'prt']);
+      const pgtField = fields.find((f) => f.id === 'pgt');
+      const tgtField = fields.find((f) => f.id === 'tgt');
+      const prtField = fields.find((f) => f.id === 'prt');
+      const pgt = Number(pgtField?.value ?? 0) || 0;
+      const tgt = Number(tgtField?.value ?? 0) || 0;
+      const prt = Number(prtField?.value ?? 0) || 0;
       const totalTeaching = pgt + tgt + prt;
-      const teacherListRaw = section.teacherListUrl?.trim() || RRGREEN_TEACHER_LIST_URL;
-      const teacherListHref = documentHref(teacherListRaw);
+      const mainFields = fields.filter((f) => !teachingCountIds.has(f.id));
+      const principalIdx = mainFields.findIndex((f) => f.id === 'principal');
+      const totalBlockAt = principalIdx >= 0 ? principalIdx + 1 : 0;
+
+      type StaffDisplayRow =
+        | { kind: 'field'; field: MpdSectionField }
+        | { kind: 'total_block' };
+      const displayRows: StaffDisplayRow[] = [
+        ...mainFields.slice(0, totalBlockAt).map((field) => ({ kind: 'field' as const, field })),
+        { kind: 'total_block' },
+        ...mainFields.slice(totalBlockAt).map((field) => ({ kind: 'field' as const, field })),
+      ];
+      const teachingSubRows = [
+        { id: 'pgt', label: pgtField?.label ?? 'a) PGT', value: pgt },
+        { id: 'tgt', label: tgtField?.label ?? 'b) TGT', value: tgt },
+        { id: 'prt', label: prtField?.label ?? 'c) PRT', value: prt },
+      ];
+
+      let serial = 0;
+      const bodyRows: ReactNode[] = [];
+      displayRows.forEach((item) => {
+        if (item.kind === 'field') {
+          serial += 1;
+          const stripe = (serial - 1) % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+          bodyRows.push(
+            <tr key={item.field.id} className={stripe}>
+              <td className="px-6 py-4 text-sm font-medium">{serial}</td>
+              <td className="px-6 py-4 text-sm">{item.field.label}</td>
+              <td className="px-6 py-4 text-sm font-medium whitespace-pre-line">
+                {item.field.value || '—'}
+              </td>
+            </tr>
+          );
+          return;
+        }
+        serial += 1;
+        const totalStripe = (serial - 1) % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+        bodyRows.push(
+          <tr key="total_teachers" className={totalStripe}>
+            <td className="px-6 py-4 text-sm font-medium">{serial}</td>
+            <td className="px-6 py-4 text-sm font-medium">Total teachers (computed)</td>
+            <td className="px-6 py-4 text-sm font-medium">{totalTeaching}</td>
+          </tr>
+        );
+        teachingSubRows.forEach((sub) => {
+          bodyRows.push(
+            <tr key={sub.id} className="bg-gray-50/80">
+              <td className="px-6 py-3 text-sm text-muted-foreground">—</td>
+              <td className="px-6 py-3 text-sm pl-10 text-muted-foreground">{sub.label}</td>
+              <td className="px-6 py-3 text-sm font-medium">{sub.value}</td>
+            </tr>
+          );
+        });
+      });
+
       return (
         <Card>
           <div className="overflow-x-auto">
@@ -275,40 +332,7 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
                   <th className="px-6 py-4 text-left text-sm font-semibold">Details</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {fields.map((f, i) => (
-                  <tr key={f.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-6 py-4 text-sm font-medium">{i + 1}</td>
-                    <td className="px-6 py-4 text-sm">{f.label}</td>
-                    <td className="px-6 py-4 text-sm font-medium whitespace-pre-line">
-                      {f.value || '—'}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium">—</td>
-                  <td className="px-6 py-4 text-sm">Total teachers (computed)</td>
-                  <td className="px-6 py-4 text-sm font-medium">{totalTeaching}</td>
-                </tr>
-                <tr className="bg-white">
-                  <td className="px-6 py-4 text-sm font-medium">{fields.length + 1}</td>
-                  <td className="px-6 py-4 text-sm">Upload Teacher&apos;s List (Download sample from Admin portal)</td>
-                  <td className="px-6 py-4">
-                    {teacherListHref ? (
-                      <DisclosureDocLink
-                        variant="green"
-                        label="Open teacher list"
-                        link={teacherListRaw}
-                      />
-                    ) : (
-                      <span className="inline-flex items-center gap-2 text-amber-800 text-sm font-medium">
-                        <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /> Not uploaded — use Backend →
-                        Appendix‑IX Data.
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              </tbody>
+              <tbody className="divide-y divide-gray-200">{bodyRows}</tbody>
             </table>
           </div>
         </Card>
@@ -316,10 +340,6 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
     }
     case 'infra_table': {
       const fields = section.infraFields ?? [];
-      const ytRaw =
-        section.youtubeInspectionUrl?.trim() || RRGREEN_YOUTUBE_INSPECTION_URL;
-      const ytHref = normalizeYoutubeInspectionUrl(ytRaw);
-      const ytOk = isYoutubeHttpsInspectionUrlAccepted(ytRaw);
       return (
         <Card>
           <div className="overflow-x-auto">
@@ -332,34 +352,41 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {fields.map((row, index) => (
-                  <tr key={row.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-6 py-4 text-sm font-medium">{index + 1}</td>
-                    <td className="px-6 py-4 text-sm">{row.label}</td>
-                    <td className="px-6 py-4 text-sm font-medium">
-                      {row.type === 'boolean' ? (
-                        row.value === 'true' ? 'YES' : 'NO'
-                      ) : row.type === 'url' && row.value ? (
-                        <DisclosureDocLink variant="green" label="Open file" link={row.value} />
-                      ) : (
-                        row.value || '—'
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                <tr className={fields.length % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="px-6 py-4 text-sm font-medium">{fields.length + 1}</td>
-                  <td className="px-6 py-4 text-sm">
-                    LINK OF YOUTUBE VIDEO OF THE INSPECTION OF SCHOOL (INFRASTRUCTURE)
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium">
-                    {ytOk ? (
-                      <DisclosureDocLink variant="accent" label="Watch YouTube inspection video" link={ytHref} />
-                    ) : (
-                      <span className="text-amber-800 text-sm">Pending valid YouTube HTTPS URL</span>
-                    )}
-                  </td>
-                </tr>
+                {fields.map((row, index) => {
+                  const isYoutubeRow = row.id === 'youtube_inspection';
+                  const ytRaw = isYoutubeRow
+                    ? row.value?.trim() || section.youtubeInspectionUrl?.trim() || RRGREEN_YOUTUBE_INSPECTION_URL
+                    : '';
+                  const ytHref = isYoutubeRow ? normalizeYoutubeInspectionUrl(ytRaw) : '';
+                  const ytOk = isYoutubeRow ? isYoutubeHttpsInspectionUrlAccepted(ytRaw) : false;
+                  return (
+                    <tr key={row.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-6 py-4 text-sm font-medium">{index + 1}</td>
+                      <td className="px-6 py-4 text-sm">{row.label}</td>
+                      <td className="px-6 py-4 text-sm font-medium">
+                        {row.type === 'boolean' ? (
+                          row.value === 'true' ? 'YES' : 'NO'
+                        ) : isYoutubeRow ? (
+                          ytOk ? (
+                            <DisclosureDocLink
+                              variant="accent"
+                              label="Watch YouTube inspection video"
+                              link={ytHref}
+                            />
+                          ) : (
+                            <span className="text-amber-800 text-sm">
+                              Pending valid YouTube HTTPS URL
+                            </span>
+                          )
+                        ) : row.type === 'url' && row.value ? (
+                          <DisclosureDocLink variant="green" label="Open file" link={row.value} />
+                        ) : (
+                          row.value || '—'
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
