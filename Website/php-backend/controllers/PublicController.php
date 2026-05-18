@@ -208,8 +208,10 @@ class PublicController {
      */
     public function getDocuments() {
         try {
-            $documents = $this->db->fetchAll("SELECT * FROM documents ORDER BY category, CAST(sno AS UNSIGNED)");
-            
+            $documents = $this->db->fetchAll(
+                "SELECT * FROM documents WHERE hidden_from_public = 0 ORDER BY category, sort_order ASC, CAST(sno AS UNSIGNED)"
+            );
+
             Response::success(['documents' => $documents]);
         } catch (Exception $e) {
             Response::error('Failed to fetch documents: ' . $e->getMessage(), 500);
@@ -223,7 +225,9 @@ class PublicController {
     public function getMpdBundle() {
         try {
             require_once __DIR__ . '/../services/MpdDisclosureService.php';
-            $documents = $this->db->fetchAll("SELECT * FROM documents ORDER BY category, CAST(sno AS UNSIGNED)");
+            $documents = $this->db->fetchAll(
+                "SELECT * FROM documents WHERE hidden_from_public = 0 ORDER BY category, sort_order ASC, CAST(sno AS UNSIGNED)"
+            );
             $disclosure = MpdDisclosureService::loadPayload($this->db);
             $mpdUpdatedAt = MpdDisclosureService::updatedAt($this->db);
 

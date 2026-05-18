@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
@@ -28,7 +29,25 @@ import {
   RefreshCw,
   Edit2,
   ClipboardList,
+  GripVertical,
+  Pencil,
+  Plus,
+  Trash2 as TrashIcon,
+  Check,
+  EyeOff,
 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Link } from 'react-router-dom';
@@ -50,6 +69,38 @@ interface Document {
   information?: string;
   link: string;
   status: string;
+  sort_order?: number | string;
+  hidden_from_public?: number | boolean | string;
+}
+
+const MANDATORY_DOC_SECTIONS: { category: Document['category']; title: string }[] = [
+  { category: 'documents', title: 'B — Documents and Information' },
+  { category: 'academic', title: 'C — Result and Academics' },
+  { category: 'infrastructure', title: 'E — School Infrastructure' },
+];
+
+function sortMandatoryDocs(docs: Document[]): Document[] {
+  return [...docs].sort((a, b) => {
+    const ao = Number(a.sort_order ?? a.sno ?? 0);
+    const bo = Number(b.sort_order ?? b.sno ?? 0);
+    if (ao !== bo) return ao - bo;
+    return String(a.sno).localeCompare(String(b.sno), undefined, { numeric: true });
+  });
+}
+
+function reorderMandatoryDocsById(list: Document[], fromId: string, toId: string): Document[] {
+  const ix = list.findIndex((d) => d.id === fromId);
+  const iy = list.findIndex((d) => d.id === toId);
+  if (ix < 0 || iy < 0 || ix === iy) return list;
+  const copy = [...list];
+  const [removed] = copy.splice(ix, 1);
+  copy.splice(iy, 0, removed);
+  return copy;
+}
+
+function isMandatoryDocHidden(doc: Document): boolean {
+  const h = doc.hidden_from_public;
+  return h === true || h === 1 || h === '1';
 }
 
 type View = 'smtp' | 'mpd-appendix' | 'documents' | 'hero-images' | 'gallery' | 'graph-api';
@@ -168,6 +219,16 @@ const Backend = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const [editingTitleValue, setEditingTitleValue] = useState('');
+  const editingTitleRef = useRef<HTMLInputElement>(null);
+  const [showAddDocForm, setShowAddDocForm] = useState(false);
+  const [newDoc, setNewDoc] = useState<{
+    category: Document['category'];
+    information: string;
+    sno: string;
+    link: string;
+  }>({ category: 'documents', information: '', sno: '', link: '' });
   
   // Hero images state
   const [heroImages, setHeroImages] = useState<HeroImage[]>([]);
@@ -355,7 +416,10 @@ const Backend = () => {
 
   const loadDocuments = async () => {
     try {
-      const response = await fetch('/api/documents');
+      const sessionId = localStorage.getItem('adminSessionId');
+      const response = await fetch('/api/admin/documents', {
+        headers: sessionId ? { 'x-session-id': sessionId } : {},
+      });
       const data = await response.json();
       if (data.success) {
         setDocuments(data.documents);
@@ -364,6 +428,137 @@ const Backend = () => {
       console.error('Error loading documents:', error);
       toast.error('Failed to load documents');
     }
+  };
+
+  const reorderMandatoryDocumentsCategory = async (
+    category: Document['category'],
+    fromId: string,
+    toId: string,
+  ) => {
+    if (fromId === toId) return;
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) {
+      toast.error('Session expired. Please login again.');
+      setIsAuthenticated(false);
+      return;
+    }
+    const baseList = sortMandatoryDocs(documents.filter((d) => d.category === category));
+    const newOrder = reorderMandatoryDocsById(baseList, fromId, toId);
+    const ids = newOrder.map((d) => d.id);
+    try {
+      const response = await fetch('/api/admin/documents/reorder', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-id': sessionId,
+        },
+        body: JSON.stringify({ category, ids }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Order updated');
+        await loadDocuments();
+      } else {
+        toast.error(data.error || 'Failed to reorder');
+      }
+    } catch {
+      toast.error('Failed to reorder documents');
+    }
+  };
+
+  const toggleMandatoryDocumentHidden = async (doc: Document, hidden: boolean) => {
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) {
+      toast.error('Session expired. Please login again.');
+      setIsAuthenticated(false);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/admin/documents/${doc.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-id': sessionId,
+        },
+        body: JSON.stringify({ hidden_from_public: hidden }),
+      });
+      const data = await response.json();
+      if (data.success && data.document) {
+        setDocuments((prev) => prev.map((d) => (d.id === doc.id ? { ...d, ...data.document } : d)));
+        toast.success(hidden ? 'Hidden from public disclosure page' : 'Shown on public disclosure page');
+      } else {
+        toast.error(data.error || 'Failed to update visibility');
+      }
+    } catch {
+      toast.error('Failed to update visibility');
+    }
+  };
+
+  const saveDocumentTitle = async (docId: string, newTitle: string) => {
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) { toast.error('Session expired'); setIsAuthenticated(false); return; }
+    const trimmed = newTitle.trim();
+    if (!trimmed) { toast.error('Title cannot be empty'); return; }
+    try {
+      const res = await fetch(`/api/admin/documents/${docId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
+        body: JSON.stringify({ information: trimmed }),
+      });
+      const data = await res.json();
+      if (data.success && data.document) {
+        setDocuments((prev) => prev.map((d) => (d.id === docId ? { ...d, ...data.document } : d)));
+        toast.success('Title updated');
+      } else {
+        toast.error(data.error || 'Failed to update title');
+      }
+    } catch { toast.error('Failed to update title'); }
+    finally { setEditingTitleId(null); }
+  };
+
+  const createMandatoryDocument = async () => {
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) { toast.error('Session expired'); setIsAuthenticated(false); return; }
+    if (!newDoc.information.trim()) { toast.error('Title is required'); return; }
+    try {
+      const res = await fetch('/api/admin/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
+        body: JSON.stringify({
+          category: newDoc.category,
+          information: newDoc.information.trim(),
+          sno: newDoc.sno.trim() || undefined,
+          link: newDoc.link.trim() || '#',
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.document) {
+        setDocuments((prev) => [...prev, data.document]);
+        setNewDoc({ category: 'documents', information: '', sno: '', link: '' });
+        setShowAddDocForm(false);
+        toast.success('Document row created');
+      } else {
+        toast.error(data.error || 'Failed to create document');
+      }
+    } catch { toast.error('Failed to create document'); }
+  };
+
+  const deleteMandatoryDocument = async (doc: Document) => {
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) { toast.error('Session expired'); setIsAuthenticated(false); return; }
+    try {
+      const res = await fetch(`/api/admin/documents/${doc.id}`, {
+        method: 'DELETE',
+        headers: { 'x-session-id': sessionId },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+        toast.success('Document deleted');
+      } else {
+        toast.error(data.error || 'Failed to delete');
+      }
+    } catch { toast.error('Failed to delete document'); }
   };
 
   const normalizeMpdPayload = (incoming: Partial<MpdPayload>): MpdPayload => {
@@ -2067,235 +2262,305 @@ const Backend = () => {
     }
 
     if (currentView === 'documents') {
-      const documentsByCategory = {
-        documents: documents.filter(d => d.category === 'documents'),
-        academic: documents.filter(d => d.category === 'academic'),
-        infrastructure: documents.filter(d => d.category === 'infrastructure'),
-      };
-
       return (
         <div className="space-y-6">
+          {/* Header */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <FileText className="h-5 w-5" />
-                <span>Mandatory Disclosure Documents</span>
-              </CardTitle>
-              <CardDescription>
-                Manage PDF documents for the mandatory disclosure page
-              </CardDescription>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Mandatory Disclosure Documents
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Drag ⠿ to reorder · Click ✏ to rename · Toggle to show/hide on public page · Delete removes the row permanently.
+                  </CardDescription>
+                </div>
+                <Button size="sm" onClick={() => setShowAddDocForm((v) => !v)}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  {showAddDocForm ? 'Cancel' : 'Add Document'}
+                </Button>
+              </div>
             </CardHeader>
+
+            {/* ── Add Document Form ── */}
+            {showAddDocForm && (
+              <CardContent className="border-t pt-5 space-y-4">
+                <p className="text-sm font-semibold">New Document Row</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-1">
+                    <Label>Category</Label>
+                    <Select
+                      value={newDoc.category}
+                      onValueChange={(v) =>
+                        setNewDoc((p) => ({ ...p, category: v as Document['category'] }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="documents">B — Documents</SelectItem>
+                        <SelectItem value="academic">C — Academic</SelectItem>
+                        <SelectItem value="infrastructure">E — Infrastructure</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1 sm:col-span-1 lg:col-span-2">
+                    <Label>Title / Information <span className="text-destructive">*</span></Label>
+                    <Input
+                      placeholder="e.g. Fire Safety Certificate"
+                      value={newDoc.information}
+                      onChange={(e) => setNewDoc((p) => ({ ...p, information: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>S.No (optional)</Label>
+                    <Input
+                      placeholder="auto"
+                      value={newDoc.sno}
+                      onChange={(e) => setNewDoc((p) => ({ ...p, sno: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label>Link (optional)</Label>
+                  <Input
+                    placeholder="/documents/fire.pdf or https://…"
+                    value={newDoc.link}
+                    onChange={(e) => setNewDoc((p) => ({ ...p, link: e.target.value }))}
+                  />
+                </div>
+                <Button onClick={() => void createMandatoryDocument()}>
+                  <Plus className="h-4 w-4 mr-1" /> Create Row
+                </Button>
+              </CardContent>
+            )}
           </Card>
 
-          {/* B - Documents */}
-          <Card>
-            <CardHeader>
-              <CardTitle>B - Documents and Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {documentsByCategory.documents.map((doc) => (
-                  <div key={doc.id} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="font-semibold text-sm">S.No: {doc.sno}</span>
-                          <span className={`px-2 py-1 rounded text-xs ${doc.status === '✓ Available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {doc.status}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          {doc.document || doc.information}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Current: {doc.link === '#' ? 'Not set' : doc.link}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedDocument(selectedDocument?.id === doc.id ? null : doc)}
-                      >
-                        {selectedDocument?.id === doc.id ? 'Cancel' : 'Edit'}
-                      </Button>
-                    </div>
-                    {selectedDocument?.id === doc.id && (
-                      <div className="border-t pt-4 space-y-3">
-                        <div className="space-y-2">
-                          <Label>Upload New PDF</Label>
-                          <div className="flex items-center space-x-2">
-                            <Input
-                              type="file"
-                              accept=".pdf"
-                              onChange={(e) => handleFileUpload(e, doc.id)}
-                              disabled={uploadingFile}
-                              className="flex-1"
-                            />
-                            {uploadingFile && <Loader2 className="h-4 w-4 animate-spin" />}
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Or Enter Link</Label>
-                          <div className="flex space-x-2">
-                            <Input
-                              type="text"
-                              placeholder="/path/to/file.pdf"
-                              defaultValue={doc.link}
-                              onBlur={(e) => {
-                                if (e.target.value !== doc.link) {
-                                  handleUpdateDocumentLink(doc.id, e.target.value);
-                                }
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/* ── Per-category tables ── */}
+          {MANDATORY_DOC_SECTIONS.map(({ category, title }) => {
+            const sectionDocs = sortMandatoryDocs(documents.filter((d) => d.category === category));
+            return (
+              <Card key={category}>
+                <CardHeader>
+                  <CardTitle className="text-base">{title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {sectionDocs.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No rows yet. Use "Add Document" above.</p>
+                  )}
+                  <div className="space-y-3">
+                    {sectionDocs.map((doc) => {
+                      const isEditing = editingTitleId === doc.id;
+                      const isExpanded = selectedDocument?.id === doc.id;
+                      const hidden = isMandatoryDocHidden(doc);
+                      const titleText = (category === 'documents' ? doc.document || doc.information : doc.information) ?? '';
 
-          {/* C - Academic */}
-          <Card>
-            <CardHeader>
-              <CardTitle>C - Result and Academics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {documentsByCategory.academic.map((doc) => (
-                  <div key={doc.id} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="font-semibold text-sm">S.No: {doc.sno}</span>
-                          <span className={`px-2 py-1 rounded text-xs ${doc.status === '✓ Available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {doc.status}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          {doc.information}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Current: {doc.link === '#' ? 'Not set' : doc.link}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedDocument(selectedDocument?.id === doc.id ? null : doc)}
-                      >
-                        {selectedDocument?.id === doc.id ? 'Cancel' : 'Edit'}
-                      </Button>
-                    </div>
-                    {selectedDocument?.id === doc.id && (
-                      <div className="border-t pt-4 space-y-3">
-                        <div className="space-y-2">
-                          <Label>Upload New PDF</Label>
-                          <div className="flex items-center space-x-2">
-                            <Input
-                              type="file"
-                              accept=".pdf"
-                              onChange={(e) => handleFileUpload(e, doc.id)}
-                              disabled={uploadingFile}
-                              className="flex-1"
-                            />
-                            {uploadingFile && <Loader2 className="h-4 w-4 animate-spin" />}
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Or Enter Link</Label>
-                          <div className="flex space-x-2">
-                            <Input
-                              type="text"
-                              placeholder="/path/to/file.pdf"
-                              defaultValue={doc.link}
-                              onBlur={(e) => {
-                                if (e.target.value !== doc.link) {
-                                  handleUpdateDocumentLink(doc.id, e.target.value);
-                                }
+                      return (
+                        <div
+                          key={doc.id}
+                          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const fromId = e.dataTransfer.getData('text/plain');
+                            if (fromId && fromId !== doc.id)
+                              void reorderMandatoryDocumentsCategory(category, fromId, doc.id);
+                          }}
+                          className={`border rounded-lg p-3 space-y-3 transition-colors ${
+                            hidden ? 'opacity-70 bg-muted/30 border-dashed' : 'bg-card'
+                          }`}
+                        >
+                          {/* Row header */}
+                          <div className="flex items-start gap-2">
+                            {/* Drag handle */}
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', doc.id);
+                                e.dataTransfer.effectAllowed = 'move';
                               }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                              className="mt-1 text-muted-foreground hover:text-foreground shrink-0 cursor-grab active:cursor-grabbing touch-none"
+                              aria-label="Drag to reorder"
+                            >
+                              <GripVertical className="h-5 w-5" />
+                            </div>
 
-          {/* E - Infrastructure */}
-          <Card>
-            <CardHeader>
-              <CardTitle>E - School Infrastructure</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {documentsByCategory.infrastructure.map((doc) => (
-                  <div key={doc.id} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="font-semibold text-sm">S.No: {doc.sno}</span>
-                          <span className={`px-2 py-1 rounded text-xs ${doc.status === '✓ Available' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {doc.status}
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          {doc.information}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Current: {doc.link === '#' ? 'Not set' : doc.link}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedDocument(selectedDocument?.id === doc.id ? null : doc)}
-                      >
-                        {selectedDocument?.id === doc.id ? 'Cancel' : 'Edit'}
-                      </Button>
-                    </div>
-                    {selectedDocument?.id === doc.id && (
-                      <div className="border-t pt-4 space-y-3">
-                        <div className="space-y-2">
-                          <Label>Upload New PDF</Label>
-                          <div className="flex items-center space-x-2">
-                            <Input
-                              type="file"
-                              accept=".pdf"
-                              onChange={(e) => handleFileUpload(e, doc.id)}
-                              disabled={uploadingFile}
-                              className="flex-1"
-                            />
-                            {uploadingFile && <Loader2 className="h-4 w-4 animate-spin" />}
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Or Enter Link</Label>
-                          <div className="flex space-x-2">
-                            <Input
-                              type="text"
-                              placeholder="/path/to/file.pdf"
-                              defaultValue={doc.link}
-                              onBlur={(e) => {
-                                if (e.target.value !== doc.link) {
-                                  handleUpdateDocumentLink(doc.id, e.target.value);
+                            {/* S.No badge */}
+                            <span className="mt-1 shrink-0 text-xs font-mono bg-muted px-1.5 py-0.5 rounded">
+                              #{doc.sno}
+                            </span>
+
+                            {/* Title — inline edit */}
+                            <div className="flex-1 min-w-0">
+                              {isEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    ref={editingTitleRef}
+                                    className="h-7 text-sm"
+                                    defaultValue={titleText}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter')
+                                        void saveDocumentTitle(doc.id, (e.target as HTMLInputElement).value);
+                                      if (e.key === 'Escape') setEditingTitleId(null);
+                                    }}
+                                    autoFocus
+                                  />
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 shrink-0"
+                                    onClick={() => {
+                                      const val = editingTitleRef.current?.value ?? '';
+                                      void saveDocumentTitle(doc.id, val);
+                                    }}
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 shrink-0"
+                                    onClick={() => setEditingTitleId(null)}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-medium leading-tight">{titleText}</span>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 shrink-0"
+                                    title="Rename"
+                                    onClick={() => {
+                                      setEditingTitleId(doc.id);
+                                      setEditingTitleValue(titleText);
+                                    }}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              )}
+
+                              {/* Status + badges */}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                  doc.status === '✓ Available'
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                  {doc.status}
+                                </span>
+                                {hidden && (
+                                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-900">
+                                    <EyeOff className="h-3 w-3" /> Hidden
+                                  </span>
+                                )}
+                                {doc.link && doc.link !== '#' && (
+                                  <span className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                    {doc.link}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right controls */}
+                            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">Show</span>
+                                <Switch
+                                  id={`show-${doc.id}`}
+                                  checked={!hidden}
+                                  onCheckedChange={(checked) =>
+                                    void toggleMandatoryDocumentHidden(doc, !checked)
+                                  }
+                                />
+                              </div>
+
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  setSelectedDocument(isExpanded ? null : doc)
                                 }
-                              }}
-                            />
+                              >
+                                {isExpanded ? 'Close' : 'Edit Link'}
+                              </Button>
+
+                              {/* Delete with confirm */}
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="icon" className="h-8 w-8 text-destructive border-destructive/30 hover:bg-destructive/10">
+                                    <TrashIcon className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete document row?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will permanently remove &quot;{titleText}&quot; from the disclosure table. This cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                      onClick={() => void deleteMandatoryDocument(doc)}
+                                    >
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
                           </div>
+
+                          {/* Expanded: upload / link edit */}
+                          {isExpanded && (
+                            <div className="border-t pt-3 space-y-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Upload New PDF</Label>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    type="file"
+                                    accept=".pdf"
+                                    onChange={(e) => handleFileUpload(e, doc.id)}
+                                    disabled={uploadingFile}
+                                    className="flex-1 text-xs"
+                                  />
+                                  {uploadingFile && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
+                                </div>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Or set link manually</Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    className="text-xs"
+                                    placeholder="/documents/file.pdf or https://…"
+                                    defaultValue={doc.link === '#' ? '' : doc.link}
+                                    onBlur={(e) => {
+                                      const v = e.target.value.trim() || '#';
+                                      if (v !== doc.link)
+                                        handleUpdateDocumentLink(doc.id, v);
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       );
     }

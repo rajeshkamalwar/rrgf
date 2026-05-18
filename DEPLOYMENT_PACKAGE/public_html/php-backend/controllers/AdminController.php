@@ -131,15 +131,68 @@ class AdminController {
     }
     
     /**
-     * PUT /api/admin/documents/:id
+     * POST /api/admin/documents — create a new document row
+     */
+    public function createDocument() {
+        $this->auth->requireAuth();
+        $data = Request::jsonBody();
+
+        $category = $data['category'] ?? '';
+        $allowed = ['documents', 'academic', 'infrastructure'];
+        if (!in_array($category, $allowed, true)) {
+            Response::error('Invalid category. Must be documents, academic, or infrastructure.');
+        }
+
+        $information = trim((string)($data['information'] ?? ''));
+        if ($information === '') {
+            Response::error('information (title) is required');
+        }
+
+        $link   = trim((string)($data['link'] ?? '#'));
+        $status = ($link !== '' && $link !== '#') ? '✓ Available' : 'Not Available';
+        $sno    = trim((string)($data['sno'] ?? ''));
+
+        // Auto-generate sno if not provided — next integer in category
+        if ($sno === '') {
+            $row  = $this->db->fetchOne(
+                'SELECT MAX(CAST(sno AS UNSIGNED)) as m FROM documents WHERE category = ?',
+                [$category]
+            );
+            $sno  = (string)(((int)($row['m'] ?? 0)) + 1);
+        }
+
+        // Auto-generate sort_order — put at end
+        $maxRow = $this->db->fetchOne(
+            'SELECT MAX(sort_order) as m FROM documents WHERE category = ?',
+            [$category]
+        );
+        $sortOrder = ((int)($maxRow['m'] ?? 0)) + 10;
+
+        $id = strtolower(preg_replace('/[^a-z0-9]/i', '', substr($category, 0, 4)))
+            . '-' . uniqid();
+
+        try {
+            $this->db->insert(
+                'INSERT INTO documents (id, category, sno, document, information, link, status, sort_order, hidden_from_public)
+                 VALUES (?, ?, ?, NULL, ?, ?, ?, ?, 0)',
+                [$id, $category, $sno, $information, $link, $status, $sortOrder]
+            );
+            $document = $this->db->fetchOne('SELECT * FROM documents WHERE id = ?', [$id]);
+            Response::success(['document' => $document]);
+        } catch (Exception $e) {
+            Response::error('Failed to create document: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * PUT /api/admin/documents/:id — file upload OR JSON meta update (link + title + sno)
      */
     public function updateDocument($documentId) {
         $this->auth->requireAuth();
         
-        // Check if file upload
+        // File upload path
         if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
             try {
-                // Validate PDF
                 $file = $_FILES['file'];
                 $finfo = finfo_open(FILEINFO_MIME_TYPE);
                 $mimeType = finfo_file($finfo, $file['tmp_name']);
@@ -149,10 +202,8 @@ class AdminController {
                     Response::error('Only PDF files are allowed');
                 }
                 
-                // Upload file
                 $fileUrl = $this->fileUpload->upload('file', 'documents');
                 
-                // Update document in database
                 $this->db->execute(
                     "UPDATE documents SET link = ?, status = '✓ Available' WHERE id = ?",
                     [$fileUrl, $documentId]
@@ -163,26 +214,181 @@ class AdminController {
             } catch (Exception $e) {
                 Response::error('Failed to upload document: ' . $e->getMessage(), 500);
             }
-        } else {
-            // Update link via JSON
-            $data = Request::jsonBody();
+            return;
+        }
 
-            if (empty($data['link'])) {
-                Response::error('Link is required');
+        // JSON meta update — at least one of link / information / sno required
+        $data = Request::jsonBody();
+
+        $fields = [];
+        $params = [];
+
+        if (array_key_exists('information', $data)) {
+            $info = trim((string)$data['information']);
+            if ($info === '') Response::error('information cannot be empty');
+            $fields[] = 'information = ?';
+            $params[] = $info;
+            // keep document column in sync (legacy column)
+            $fields[] = 'document = NULL';
+        }
+
+        if (array_key_exists('sno', $data)) {
+            $sno = trim((string)$data['sno']);
+            if ($sno === '') Response::error('sno cannot be empty');
+            $fields[] = 'sno = ?';
+            $params[] = $sno;
+        }
+
+        if (array_key_exists('link', $data)) {
+            $link = $data['link'];
+            $status = ($link === '' || $link === '#') ? 'Not Available' : '✓ Available';
+            $fields[] = 'link = ?';
+            $fields[] = 'status = ?';
+            $params[] = $link;
+            $params[] = $status;
+        }
+
+        if (empty($fields)) {
+            Response::error('Nothing to update — provide information, sno, or link');
+        }
+
+        try {
+            $params[] = $documentId;
+            $this->db->execute(
+                'UPDATE documents SET ' . implode(', ', $fields) . ' WHERE id = ?',
+                $params
+            );
+            $document = $this->db->fetchOne('SELECT * FROM documents WHERE id = ?', [$documentId]);
+            if (!$document) Response::error('Document not found', 404);
+            Response::success(['document' => $document]);
+        } catch (Exception $e) {
+            Response::error('Failed to update document: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * DELETE /api/admin/documents/:id
+     */
+    public function deleteDocument($documentId) {
+        $this->auth->requireAuth();
+
+        try {
+            $doc = $this->db->fetchOne('SELECT * FROM documents WHERE id = ?', [$documentId]);
+            if (!$doc) {
+                Response::error('Document not found', 404);
             }
-            
-            try {
-                $status = ($data['link'] === '#') ? 'Not Available' : '✓ Available';
+
+            $this->db->execute('DELETE FROM documents WHERE id = ?', [$documentId]);
+            Response::success(['deleted' => $documentId]);
+        } catch (Exception $e) {
+            Response::error('Failed to delete document: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * GET /api/admin/documents (includes hidden rows + sort_order)
+     */
+    public function getDocumentsAdmin() {
+        $this->auth->requireAuth();
+
+        try {
+            $documents = $this->db->fetchAll(
+                "SELECT * FROM documents ORDER BY category, sort_order ASC, CAST(sno AS UNSIGNED)"
+            );
+            Response::success(['documents' => $documents]);
+        } catch (Exception $e) {
+            Response::error('Failed to fetch documents: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * PATCH /api/admin/documents/:id — body: { hidden_from_public: boolean }
+     */
+    public function patchDocumentVisibility($documentId) {
+        $this->auth->requireAuth();
+        $data = Request::jsonBody();
+
+        if (!array_key_exists('hidden_from_public', $data)) {
+            Response::error('hidden_from_public is required');
+        }
+
+        $raw = $data['hidden_from_public'];
+        $hidden = filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($hidden === null) {
+            $hidden = (bool)((int)$raw);
+        }
+
+        try {
+            $n = $this->db->execute(
+                'UPDATE documents SET hidden_from_public = ? WHERE id = ?',
+                [$hidden ? 1 : 0, $documentId]
+            );
+            if ($n === 0) {
+                Response::error('Document not found', 404);
+            }
+            $document = $this->db->fetchOne('SELECT * FROM documents WHERE id = ?', [$documentId]);
+            Response::success(['document' => $document]);
+        } catch (Exception $e) {
+            Response::error('Failed to update visibility: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * PUT /api/admin/documents/reorder — body: { category, ids: string[] }
+     */
+    public function reorderDocuments() {
+        $this->auth->requireAuth();
+        $data = Request::jsonBody();
+
+        $category = $data['category'] ?? '';
+        $allowed = ['documents', 'academic', 'infrastructure'];
+        if (!in_array($category, $allowed, true)) {
+            Response::error('Invalid category');
+        }
+
+        $ids = $data['ids'] ?? null;
+        if (!is_array($ids) || empty($ids)) {
+            Response::error('ids must be a non-empty array');
+        }
+
+        foreach ($ids as $id) {
+            if (!is_string($id) || $id === '') {
+                Response::error('Invalid id in ids');
+            }
+        }
+
+        try {
+            $existing = $this->db->fetchAll(
+                'SELECT id FROM documents WHERE category = ?',
+                [$category]
+            );
+            $existingIds = array_column($existing, 'id');
+            sort($existingIds);
+
+            $sortedIncoming = $ids;
+            sort($sortedIncoming);
+
+            if ($existingIds !== $sortedIncoming) {
+                Response::error('ids must list exactly every document in this category');
+            }
+
+            $this->db->beginTransaction();
+            $order = 10;
+            foreach ($ids as $id) {
                 $this->db->execute(
-                    "UPDATE documents SET link = ?, status = ? WHERE id = ?",
-                    [$data['link'], $status, $documentId]
+                    'UPDATE documents SET sort_order = ? WHERE id = ? AND category = ?',
+                    [$order, $id, $category]
                 );
-                
-                $document = $this->db->fetchOne("SELECT * FROM documents WHERE id = ?", [$documentId]);
-                Response::success(['document' => $document]);
-            } catch (Exception $e) {
-                Response::error('Failed to update document: ' . $e->getMessage(), 500);
+                $order += 10;
             }
+            $this->db->commit();
+            Response::success(['ok' => true]);
+        } catch (Exception $e) {
+            try {
+                $this->db->rollback();
+            } catch (Exception $ignored) {
+            }
+            Response::error('Failed to reorder documents: ' . $e->getMessage(), 500);
         }
     }
     

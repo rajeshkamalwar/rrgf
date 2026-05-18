@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS `documents` (
   `information` text DEFAULT NULL,
   `link` varchar(500) NOT NULL DEFAULT '#',
   `status` varchar(50) NOT NULL DEFAULT 'Not Available',
+  `sort_order` int NOT NULL DEFAULT '0',
+  `hidden_from_public` tinyint(1) NOT NULL DEFAULT '0',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -231,3 +233,5 @@ INSERT INTO `documents` (`id`, `category`, `sno`, `document`, `information`, `li
 ('infra-8', 'infrastructure', '8', NULL, 'INFRASTRUCTURE DETAILS DOCUMENT', '/documents/INFRASTRUCTURE.pdf', '✓ Available'),
 ('infra-9', 'infrastructure', '9', NULL, 'Land certificate', '/documents/land.pdf', '✓ Available'),
 ('infra-10', 'infrastructure', '10', NULL, 'Infrastructure layout / site photograph (JPEG)', '/documents/infradoc.jpeg', '✓ Available');
+
+UPDATE `documents` SET `sort_order` = CAST(`sno` AS UNSIGNED);

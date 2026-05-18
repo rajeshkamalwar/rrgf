@@ -125,8 +125,23 @@ try {
             $adminController->updateMpd();
         }
         // Documents routes
+        elseif ($path === 'admin/documents' && $method === 'GET') {
+            $adminController->getDocumentsAdmin();
+        }
+        elseif ($path === 'admin/documents' && $method === 'POST') {
+            $adminController->createDocument();
+        }
+        elseif ($path === 'admin/documents/reorder' && $method === 'PUT') {
+            $adminController->reorderDocuments();
+        }
+        elseif ($pathParts[1] === 'documents' && count($pathParts) === 3 && $method === 'PATCH') {
+            $adminController->patchDocumentVisibility($pathParts[2]);
+        }
         elseif ($pathParts[1] === 'documents' && count($pathParts) === 3 && $method === 'PUT') {
             $adminController->updateDocument($pathParts[2]);
+        }
+        elseif ($pathParts[1] === 'documents' && count($pathParts) === 3 && $method === 'DELETE') {
+            $adminController->deleteDocument($pathParts[2]);
         }
         // Hero images routes
         elseif ($path === 'admin/hero-images' && $method === 'GET') {
