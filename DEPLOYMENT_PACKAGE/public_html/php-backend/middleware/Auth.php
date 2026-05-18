@@ -3,6 +3,8 @@
  * Authentication Middleware
  */
 
+require_once __DIR__ . '/../services/Database.php';
+
 class Auth {
     private $db;
     private $config;

@@ -10,6 +10,29 @@ ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/../php_errors.log');
 
+// Discard accidental BOM/whitespace from included config files (breaks JSON responses on shared hosting).
+ob_start();
+
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if (!$err || !in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        return;
+    }
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=UTF-8');
+        http_response_code(500);
+    }
+    echo json_encode([
+        'success' => false,
+        'error' => 'Fatal: ' . $err['message'],
+        'file' => basename($err['file']),
+        'line' => $err['line'],
+    ]);
+});
+
 // Set timezone
 date_default_timezone_set('Asia/Kolkata');
 
@@ -18,7 +41,8 @@ require_once __DIR__ . '/../services/Database.php';
 require_once __DIR__ . '/../utils/Response.php';
 require_once __DIR__ . '/../controllers/PublicController.php';
 require_once __DIR__ . '/../controllers/AdminController.php';
-require_once __DIR__ . '/../controllers/FolderController.php';
+
+ob_end_clean();
 
 // Enable CORS
 Response::enableCORS();
@@ -57,51 +81,46 @@ if (strpos($path, $basePath) === 0) {
 $path = trim($path, '/');
 $pathParts = explode('/', $path);
 
-// Route handling
+// Route handling — instantiate controllers only for the matched route (lighter on shared hosting).
 try {
-    $publicController = new PublicController();
-    $adminController = new AdminController();
-    
     // Public routes
     if ($path === 'enquiry' && $method === 'POST') {
-        $publicController->submitEnquiry();
+        (new PublicController())->submitEnquiry();
     }
     elseif ($path === 'contact' && $method === 'POST') {
-        $publicController->submitContact();
+        (new PublicController())->submitContact();
     }
     elseif ($path === 'admissions' && $method === 'POST') {
-        $publicController->submitAdmission();
+        (new PublicController())->submitAdmission();
     }
     elseif ($path === 'visit-schedule' && $method === 'POST') {
-        $publicController->submitVisitSchedule();
+        (new PublicController())->submitVisitSchedule();
     }
     elseif ($path === 'documents' && $method === 'GET') {
-        $publicController->getDocuments();
+        (new PublicController())->getDocuments();
     }
     elseif ($path === 'mpd' && $method === 'GET') {
-        $publicController->getMpdBundle();
+        (new PublicController())->getMpdBundle();
     }
     elseif ($path === 'hero-images' && $method === 'GET') {
-        $publicController->getHeroImages();
+        (new PublicController())->getHeroImages();
     }
     elseif ($path === 'gallery' && $method === 'GET') {
-        $publicController->getGallery();
+        (new PublicController())->getGallery();
     }
     // Admin routes
-    elseif ($pathParts[0] === 'admin') {
-        // Login
+    elseif (($pathParts[0] ?? '') === 'admin') {
+        $adminController = new AdminController();
+
         if ($path === 'admin/login' && $method === 'POST') {
             $adminController->login();
         }
-        // Check auth
         elseif ($path === 'admin/check-auth' && $method === 'GET') {
             $adminController->checkAuth();
         }
-        // Logout
         elseif ($path === 'admin/logout' && $method === 'POST') {
             $adminController->logout();
         }
-        // SMTP routes
         elseif ($path === 'admin/smtp' && $method === 'GET') {
             $adminController->getSMTPConfig();
         }
@@ -126,7 +145,6 @@ try {
         elseif ($path === 'admin/mpd' && $method === 'PUT') {
             $adminController->updateMpd();
         }
-        // Documents routes
         elseif ($path === 'admin/documents' && $method === 'GET') {
             $adminController->getDocumentsAdmin();
         }
@@ -136,51 +154,51 @@ try {
         elseif ($path === 'admin/documents/reorder' && $method === 'PUT') {
             $adminController->reorderDocuments();
         }
-        elseif ($pathParts[1] === 'documents' && count($pathParts) === 3 && $method === 'PATCH') {
+        elseif (($pathParts[1] ?? '') === 'documents' && count($pathParts) === 3 && $method === 'PATCH') {
             $adminController->patchDocumentVisibility($pathParts[2]);
         }
-        elseif ($pathParts[1] === 'documents' && count($pathParts) === 3 && $method === 'PUT') {
+        elseif (($pathParts[1] ?? '') === 'documents' && count($pathParts) === 3 && $method === 'PUT') {
             $adminController->updateDocument($pathParts[2]);
         }
-        elseif ($pathParts[1] === 'documents' && count($pathParts) === 3 && $method === 'DELETE') {
+        elseif (($pathParts[1] ?? '') === 'documents' && count($pathParts) === 3 && $method === 'DELETE') {
             $adminController->deleteDocument($pathParts[2]);
         }
-        // Hero images routes
         elseif ($path === 'admin/hero-images' && $method === 'GET') {
             $adminController->getHeroImages();
         }
         elseif ($path === 'admin/hero-images' && $method === 'POST') {
             $adminController->uploadHeroImage();
         }
-        elseif ($pathParts[1] === 'hero-images' && count($pathParts) === 3 && $method === 'DELETE') {
+        elseif (($pathParts[1] ?? '') === 'hero-images' && count($pathParts) === 3 && $method === 'DELETE') {
             $adminController->deleteHeroImage($pathParts[2]);
         }
         elseif ($path === 'admin/hero-images/order' && $method === 'PUT') {
             $adminController->updateHeroImageOrder();
         }
-        // Folder management routes
-        $folderController = new FolderController();
-
-        if ($path === 'admin/folders' && $method === 'GET') {
-            $folderController->getFolders();
+        elseif ($path === 'admin/folders' && $method === 'GET') {
+            require_once __DIR__ . '/../controllers/FolderController.php';
+            (new FolderController())->getFolders();
         }
         elseif ($path === 'admin/folders' && $method === 'POST') {
-            $folderController->createFolder();
+            require_once __DIR__ . '/../controllers/FolderController.php';
+            (new FolderController())->createFolder();
         }
-        elseif ($pathParts[0] === 'admin' && $pathParts[1] === 'folders' && count($pathParts) === 3 && $method === 'GET') {
-            $folderController->getFolder($pathParts[2]);
+        elseif (($pathParts[1] ?? '') === 'folders' && count($pathParts) === 3 && $method === 'GET') {
+            require_once __DIR__ . '/../controllers/FolderController.php';
+            (new FolderController())->getFolder($pathParts[2]);
         }
-        elseif ($pathParts[0] === 'admin' && $pathParts[1] === 'folders' && count($pathParts) === 3 && $method === 'PUT') {
-            $folderController->updateFolder($pathParts[2]);
+        elseif (($pathParts[1] ?? '') === 'folders' && count($pathParts) === 3 && $method === 'PUT') {
+            require_once __DIR__ . '/../controllers/FolderController.php';
+            (new FolderController())->updateFolder($pathParts[2]);
         }
-        elseif ($pathParts[0] === 'admin' && $pathParts[1] === 'folders' && count($pathParts) === 3 && $method === 'DELETE') {
-            $folderController->deleteFolder($pathParts[2]);
+        elseif (($pathParts[1] ?? '') === 'folders' && count($pathParts) === 3 && $method === 'DELETE') {
+            require_once __DIR__ . '/../controllers/FolderController.php';
+            (new FolderController())->deleteFolder($pathParts[2]);
         }
-        elseif ($pathParts[0] === 'admin' && $pathParts[1] === 'folders' && count($pathParts) === 4 && $pathParts[3] === 'fetch' && $method === 'POST') {
-            $folderController->fetchFolderImages($pathParts[2]);
+        elseif (($pathParts[1] ?? '') === 'folders' && count($pathParts) === 4 && ($pathParts[3] ?? '') === 'fetch' && $method === 'POST') {
+            require_once __DIR__ . '/../controllers/FolderController.php';
+            (new FolderController())->fetchFolderImages($pathParts[2]);
         }
-        
-        // Gallery routes (backward compatibility - keep old endpoints)
         elseif ($path === 'admin/gallery/config' && $method === 'GET') {
             $adminController->getGalleryConfig();
         }
@@ -196,16 +214,15 @@ try {
         elseif ($path === 'admin/gallery/images' && $method === 'POST') {
             $adminController->addGalleryImage();
         }
-        elseif ($pathParts[1] === 'gallery' && $pathParts[2] === 'images' && count($pathParts) === 4 && $method === 'PUT') {
+        elseif (($pathParts[1] ?? '') === 'gallery' && ($pathParts[2] ?? '') === 'images' && count($pathParts) === 4 && $method === 'PUT') {
             $adminController->updateGalleryImage($pathParts[3]);
         }
-        elseif ($pathParts[1] === 'gallery' && $pathParts[2] === 'images' && count($pathParts) === 4 && $method === 'DELETE') {
+        elseif (($pathParts[1] ?? '') === 'gallery' && ($pathParts[2] ?? '') === 'images' && count($pathParts) === 4 && $method === 'DELETE') {
             $adminController->deleteGalleryImage($pathParts[3]);
         }
         elseif ($path === 'admin/gallery/images' && $method === 'DELETE') {
             $adminController->deleteAllGalleryImages();
         }
-        // Graph API configuration routes
         elseif ($path === 'admin/graph-api/config' && $method === 'GET') {
             $adminController->getGraphApiConfig();
         }
