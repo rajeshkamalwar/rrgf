@@ -52,6 +52,7 @@ import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Link } from 'react-router-dom';
 import { MpdCategoryManager } from '@/components/MpdCategoryManager';
+import { MpdSectionBuilder } from '@/components/MpdSectionBuilder';
 import {
   Accordion,
   AccordionContent,
@@ -61,11 +62,14 @@ import {
 import { Badge } from '@/components/ui/badge';
 import {
   createDocumentCategory,
-  DEFAULT_DOCUMENT_SECTIONS,
-  normalizeDocumentSections,
+  documentListSectionsAsDocumentSections,
+  getTeacherListUrlFromSections,
+  normalizeFullMpdPayload,
+  replaceDocumentListSections,
   segmentLabel,
   suggestSegmentId,
   type MpdDocumentSection,
+  type MpdPayloadV2,
 } from '@/lib/mpdDocumentSections';
 
 interface SMTPConfig {
@@ -116,59 +120,7 @@ function isMandatoryDocHidden(doc: Document): boolean {
 
 type View = 'smtp' | 'mpd-appendix' | 'documents' | 'hero-images' | 'gallery' | 'graph-api';
 
-interface MpdSectionRow {
-  sno: string;
-  information: string;
-  details: string;
-}
-
-interface MpdStaff {
-  pgt: number;
-  tgt: number;
-  prt: number;
-  teacherSectionRatio: string;
-  specialEducator: number;
-  counsellor: number;
-}
-
-interface MpdInfrastructure {
-  campusAreaSqMtr: number;
-  classroomCount: number;
-  classroomSizeSqMtr: number;
-  labCount: number;
-  labSizeSqMtr: number;
-  internetFacility: boolean;
-  girlsToilets: number;
-  boysToilets: number;
-  youtubeInspectionUrl: string;
-  additionalFacilities: string;
-  infrastructureDocLink: string;
-}
-
-interface MpdResultYearRow {
-  year: string;
-  registered: number;
-  passed: number;
-  remarks: string;
-}
-
-interface MpdClassOutcome {
-  doesNotOffer: boolean;
-  remark: string;
-  rows: MpdResultYearRow[];
-}
-
-interface MpdPayload {
-  sectionA: MpdSectionRow[];
-  staff: MpdStaff;
-  teacherListUrl: string;
-  infrastructure: MpdInfrastructure;
-  results: { classX: MpdClassOutcome; classXII: MpdClassOutcome };
-  legalDisclaimer: string;
-  complianceDeadline: string;
-  directiveReference: string;
-  documentSections: MpdDocumentSection[];
-}
+type MpdPayload = MpdPayloadV2;
 
 interface HeroImage {
   id: string;
@@ -299,7 +251,7 @@ const Backend = () => {
     }
   }, []);
 
-  const docSections = normalizeDocumentSections(mpdDraft?.documentSections);
+  const docSections = documentListSectionsAsDocumentSections(mpdDraft?.sections ?? []);
 
   const docCountsByCategory = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -310,10 +262,13 @@ const Backend = () => {
   }, [docSections, documents]);
 
   const setDocumentCategories = (categories: MpdDocumentSection[]) => {
-    setMpdDraft((p) => ({
-      ...(p ?? normalizeMpdPayload({})),
-      documentSections: categories,
-    }));
+    setMpdDraft((p) => {
+      const base = normalizeMpdPayload(p ?? {});
+      return {
+        ...base,
+        sections: replaceDocumentListSections(base.sections, categories),
+      };
+    });
   };
 
   // Load documents when authenticated and on documents view
@@ -611,64 +566,8 @@ const Backend = () => {
     } catch { toast.error('Failed to delete document'); }
   };
 
-  const normalizeMpdPayload = (incoming: Partial<MpdPayload>): MpdPayload => {
-    const empty: MpdPayload = {
-      sectionA: [],
-      staff: { pgt: 0, tgt: 6, prt: 8, teacherSectionRatio: '1:1.5', specialEducator: 1, counsellor: 1 },
-      teacherListUrl: '',
-      infrastructure: {
-        campusAreaSqMtr: 6070.28,
-        classroomCount: 22,
-        classroomSizeSqMtr: 47,
-        labCount: 6,
-        labSizeSqMtr: 56,
-        internetFacility: true,
-        girlsToilets: 14,
-        boysToilets: 16,
-        youtubeInspectionUrl: '',
-        additionalFacilities: '',
-        infrastructureDocLink: '/documents/infradoc.jpeg',
-      },
-      results: {
-        classX: {
-          doesNotOffer: true,
-          remark: 'NA',
-          rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
-        },
-        classXII: {
-          doesNotOffer: true,
-          remark: 'NA',
-          rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
-        },
-      },
-      legalDisclaimer:
-        'Note: THE SCHOOL NEEDS TO UPLOAD SELF-ATTESTED COPIES OF ABOVE LISTED DOCUMENTS BY CHAIRMAN/MANAGER/SECRETARY AND PRINCIPAL. IN CASE IT IS NOTICED AT LATER STAGE THAT UPLOADED DOCUMENTS ARE NOT GENUINE THEN SCHOOL SHALL BE LIABLE FOR ACTION AS PER NORMS.',
-      complianceDeadline: '2026-05-21',
-      directiveReference: 'CBSE/MPD/AFF./2026 dated 06.05.2026',
-      documentSections: DEFAULT_DOCUMENT_SECTIONS,
-    };
-    const rawR = (incoming.results || {}) as Partial<MpdPayload['results']> &
-      Record<'class XII' | 'classXII' | 'classX', MpdClassOutcome | undefined>;
-
-    const cxiiSrc =
-      rawR.classXII ||
-      rawR['class XII'];
-    const classXIIOut = cxiiSrc ? { ...empty.results.classXII, ...cxiiSrc } : empty.results.classXII;
-
-    return {
-      sectionA: incoming.sectionA?.length ? incoming.sectionA : empty.sectionA,
-      staff: { ...empty.staff, ...incoming.staff },
-      teacherListUrl: incoming.teacherListUrl ?? '',
-      infrastructure: { ...empty.infrastructure, ...incoming.infrastructure },
-      results: {
-        classX: { ...empty.results.classX, ...(rawR.classX || {}) },
-        classXII: classXIIOut,
-      },
-      legalDisclaimer: incoming.legalDisclaimer || empty.legalDisclaimer,
-      complianceDeadline: incoming.complianceDeadline || empty.complianceDeadline,
-      directiveReference: incoming.directiveReference || empty.directiveReference,
-      documentSections: normalizeDocumentSections(incoming.documentSections),
-    };
+  const normalizeMpdPayload = (incoming: unknown): MpdPayload => {
+    return normalizeFullMpdPayload(incoming);
   };
 
   const saveDocumentSegment = async (docId: string, segmentId: string) => {
@@ -709,33 +608,12 @@ const Backend = () => {
     await saveDocumentSegment(doc.id, suggested);
   };
 
-  const addMpdSectionRow = () => {
-    setMpdDraft((p) => {
-      if (!p) return p;
-      const next = String(p.sectionA.length + 1);
-      return {
-        ...p,
-        sectionA: [
-          ...p.sectionA,
-          { sno: next, information: 'NEW FIELD', details: '' },
-        ],
-      };
-    });
-  };
-
-  const removeMpdSectionRow = (idx: number) => {
-    setMpdDraft((p) => {
-      if (!p || p.sectionA.length <= 1) return p;
-      const next = p.sectionA.filter((_, i) => i !== idx).map((r, i) => ({
-        ...r,
-        sno: String(i + 1),
-      }));
-      return { ...p, sectionA: next };
-    });
-  };
-
   const saveDocumentCategories = async (categories: MpdDocumentSection[]) => {
-    const draft = { ...(mpdDraft ?? normalizeMpdPayload({})), documentSections: categories };
+    const base = mpdDraft ?? normalizeMpdPayload({});
+    const draft: MpdPayload = {
+      ...base,
+      sections: replaceDocumentListSections(base.sections, categories),
+    };
     setMpdDraft(draft);
     await saveMpdAdminPayload(draft);
   };
@@ -750,7 +628,11 @@ const Backend = () => {
       toast.error(result.error);
       return;
     }
-    const draft = { ...(mpdDraft ?? normalizeMpdPayload({})), documentSections: result.categories };
+    const base = mpdDraft ?? normalizeMpdPayload({});
+    const draft: MpdPayload = {
+      ...base,
+      sections: replaceDocumentListSections(base.sections, result.categories),
+    };
     setMpdDraft(draft);
     setNewDoc((p) => ({ ...p, category: result.newId, segment_id: '' }));
     setQuickCategory({ letter: 'F', title: '', id: '' });
@@ -2023,27 +1905,6 @@ const Backend = () => {
       }
       const dl = appendixDaysRemaining(mpdDraft.complianceDeadline);
 
-      const updateOutcomeRow =
-        (
-          key: 'classX' | 'classXII',
-          field: keyof MpdResultYearRow,
-          value: string | number,
-        ) => {
-          setMpdDraft((prev) => {
-            if (!prev) return prev;
-            const outcome = prev.results[key];
-            const rows = [...outcome.rows];
-            rows[0] = { ...rows[0], [field]: value };
-            return {
-              ...prev,
-              results: {
-                ...prev.results,
-                [key]: { ...outcome, rows },
-              },
-            };
-          });
-        };
-
       return (
         <div className="space-y-6">
           <Alert variant="default" className="border-red-200 bg-red-50 text-school-secondary">
@@ -2069,8 +1930,8 @@ const Backend = () => {
                 </CardTitle>
                 <CardDescription>
                   Public page loads from /api/mpd · Last saved:{' '}
-                  {mpdUpdatedAt ? new Date(mpdUpdatedAt).toLocaleString('en-IN') : '—'} · Matches hierarchy A→E on
-                  the site
+                  {mpdUpdatedAt ? new Date(mpdUpdatedAt).toLocaleString('en-IN') : '—'} · Schema
+                  V2 — all sections are configurable below.
                 </CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -2094,355 +1955,47 @@ const Backend = () => {
             </CardHeader>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-              <CardTitle>Section A — General information</CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={addMpdSectionRow}>
-                <Plus className="h-4 w-4 mr-1" /> Add row
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <Accordion type="multiple" className="w-full space-y-1">
-                {mpdDraft.sectionA.map((row, idx) => (
-                  <AccordionItem
-                    key={`a-${idx}-${row.sno}`}
-                    value={`a-${idx}`}
-                    className="rounded-lg border px-3 border-b"
-                  >
-                    <AccordionTrigger className="hover:no-underline py-3 text-sm">
-                      <div className="flex flex-1 items-center gap-3 text-left min-w-0 pr-2">
-                        <Badge variant="outline" className="shrink-0 font-mono">
-                          {row.sno}
-                        </Badge>
-                        <span className="font-medium truncate">{row.information || 'Untitled field'}</span>
-                        <span className="text-xs text-muted-foreground truncate hidden md:inline max-w-[40%]">
-                          {row.details || '—'}
-                        </span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-4 space-y-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Field label</Label>
-                        <Input
-                          value={row.information}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setMpdDraft((p) =>
-                              !p
-                                ? p
-                                : {
-                                    ...p,
-                                    sectionA: p.sectionA.map((r, i) =>
-                                      i === idx ? { ...r, information: v } : r,
-                                    ),
-                                  },
-                            );
-                          }}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Details</Label>
-                        <Input
-                          value={row.details}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setMpdDraft((p) =>
-                              !p
-                                ? p
-                                : {
-                                    ...p,
-                                    sectionA: p.sectionA.map((r, i) =>
-                                      i === idx ? { ...r, details: v } : r,
-                                    ),
-                                  },
-                            );
-                          }}
-                        />
-                      </div>
-                      <div className="flex justify-end">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive"
-                          disabled={mpdDraft.sectionA.length <= 1}
-                          onClick={() => removeMpdSectionRow(idx)}
-                        >
-                          <TrashIcon className="h-3 w-3 mr-1" /> Remove row
-                        </Button>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </CardContent>
-          </Card>
+          <MpdSectionBuilder
+            sections={mpdDraft.sections}
+            onChange={(next) => setMpdDraft((p) => (p ? { ...p, sections: next } : p))}
+            docCounts={docCountsByCategory}
+          />
 
           <Card>
             <CardHeader>
-              <CardTitle>Document categories, segments &amp; mapping</CardTitle>
+              <CardTitle>Teacher list file (Appendix‑IX)</CardTitle>
               <CardDescription>
-                Create categories for mandatory disclosure uploads (B/C/E or custom). Optional segments group rows on
-                the public page. Click <strong>SAVE DATA</strong> above to persist.
+                Upload is processed by the server and the URL is stored on the Staff (teaching) section.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <MpdCategoryManager
-                categories={mpdDraft.documentSections}
-                onChange={setDocumentCategories}
-                showSaveButton={false}
-                docCounts={docCountsByCategory}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Section D — Staff (Teaching)</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {(
-                [['pgt', 'PGT'], ['tgt', 'TGT'], ['prt', 'PRT'], ['specialEducator', 'Special educator'], ['counsellor', 'Counsellor']] as const
-              ).map(([field, label]) => (
-                <div key={field} className="space-y-1">
-                  <Label>{label}</Label>
-                  <Input
-                    type="number"
-                    value={Number(mpdDraft.staff[field as keyof MpdStaff])}
-                    onChange={(e) =>
-                      setMpdDraft((p) =>
-                        !p
-                          ? p
-                          : {
-                              ...p,
-                              staff: {
-                                ...p.staff,
-                                [field]: parseInt(e.target.value, 10) || 0,
-                              },
-                            },
-                      )
-                    }
-                  />
-                </div>
-              ))}
-              <div className="space-y-1 sm:col-span-2 lg:col-span-2">
-                <Label>Teachers : Section ratio</Label>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Current file:{' '}
+                <span className="font-mono text-xs">
+                  {getTeacherListUrlFromSections(mpdDraft.sections) || 'Not uploaded'}
+                </span>
+              </p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button variant="outline" size="sm" type="button" onClick={downloadTeacherSampleCsv}>
+                  Download sample CSV
+                </Button>
                 <Input
-                  value={mpdDraft.staff.teacherSectionRatio}
-                  onChange={(e) =>
-                    setMpdDraft((p) => (!p ? p : { ...p, staff: { ...p.staff, teacherSectionRatio: e.target.value } }))
-                  }
-                  placeholder="1:1.5"
+                  type="file"
+                  accept=".pdf,.csv,.xlsx,.xls"
+                  className="max-w-xs"
+                  onChange={handleTeacherListUpload}
+                  disabled={uploadingTeacherList}
                 />
-              </div>
-              <div className="space-y-2 rounded-lg border p-4 sm:col-span-2 lg:col-span-3">
-                <div className="font-medium">Teacher list upload (Appendix‑IX field 8)</div>
-                <p className="text-sm text-muted-foreground">
-                  Current file:{' '}
-                  <span className="font-mono text-xs">{mpdDraft.teacherListUrl || 'Not uploaded'}</span>
-                </p>
-                <div className="flex flex-wrap gap-2 items-center">
-                  <Button variant="outline" size="sm" type="button" onClick={downloadTeacherSampleCsv}>
-                    Download sample CSV
-                  </Button>
-                  <Input type="file" accept=".pdf,.csv,.xlsx,.xls" className="max-w-xs" onChange={handleTeacherListUpload} disabled={uploadingTeacherList} />
-                  {uploadingTeacherList ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                </div>
+                {uploadingTeacherList ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Section E — School Infrastructure</CardTitle>
+              <CardTitle>Legal &amp; compliance meta</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {(
-                [
-                  ['campusAreaSqMtr', 'Campus area (sq mtr)'],
-                  ['classroomCount', 'No. classrooms'],
-                  ['classroomSizeSqMtr', 'Size per classroom (sq mtr)'],
-                  ['labCount', 'No. labs'],
-                  ['labSizeSqMtr', 'Size per lab (sq mtr)'],
-                  ['girlsToilets', 'Girls toilets'],
-                  ['boysToilets', 'Boys toilets'],
-                ] as const
-              ).map(([k, label]) => (
-                <div key={k} className="space-y-1">
-                  <Label>{label}</Label>
-                  <Input
-                    type="number"
-                    step="any"
-                    value={mpdDraft.infrastructure[k]}
-                    onChange={(e) =>
-                      setMpdDraft((p) =>
-                        !p
-                          ? p
-                          : {
-                              ...p,
-                              infrastructure: {
-                                ...p.infrastructure,
-                                [k]: parseFloat(e.target.value) || 0,
-                              },
-                            },
-                      )
-                    }
-                  />
-                </div>
-              ))}
-              <div className="flex items-center gap-2 sm:col-span-3">
-                <Checkbox
-                  id="inet"
-                  checked={mpdDraft.infrastructure.internetFacility}
-                  onCheckedChange={(checked) =>
-                    setMpdDraft((p) =>
-                      !p
-                        ? p
-                        : {
-                            ...p,
-                            infrastructure: {
-                              ...p.infrastructure,
-                              internetFacility: Boolean(checked),
-                            },
-                          },
-                    )
-                  }
-                />
-                <Label htmlFor="inet">Internet facility</Label>
-              </div>
-              <div className="space-y-1 sm:col-span-2 lg:col-span-3">
-                <Label>YouTube inspection video (full https URL — fixes bad wwwyoutubecom paste)</Label>
-                <Input
-                  value={mpdDraft.infrastructure.youtubeInspectionUrl}
-                  onChange={(e) =>
-                    setMpdDraft((p) =>
-                      !p
-                        ? p
-                        : {
-                            ...p,
-                            infrastructure: {
-                              ...p.infrastructure,
-                              youtubeInspectionUrl: e.target.value,
-                            },
-                          },
-                    )
-                  }
-                  placeholder="https://www.youtube.com/watch?v=..."
-                />
-              </div>
-              <div className="space-y-1 sm:col-span-3">
-                <Label>Additional facilities (text)</Label>
-                <Input
-                  value={mpdDraft.infrastructure.additionalFacilities}
-                  onChange={(e) =>
-                    setMpdDraft((p) =>
-                      !p
-                        ? p
-                        : {
-                            ...p,
-                            infrastructure: {
-                              ...p.infrastructure,
-                              additionalFacilities: e.target.value,
-                            },
-                          },
-                    )
-                  }
-                />
-              </div>
-              <div className="space-y-1 sm:col-span-3">
-                <Label>Infrastructure supporting document URL</Label>
-                <Input
-                  value={mpdDraft.infrastructure.infrastructureDocLink}
-                  onChange={(e) =>
-                    setMpdDraft((p) =>
-                      !p
-                        ? p
-                        : {
-                            ...p,
-                            infrastructure: {
-                              ...p.infrastructure,
-                              infrastructureDocLink: e.target.value,
-                            },
-                          },
-                    )
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Section C — Result and Academics (Classes X / XII)</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              {(['classX', 'classXII'] as const).map((gk) => {
-                const outcome = mpdDraft.results[gk];
-                const title = gk === 'classX' ? 'Class X' : 'Class XII';
-                return (
-                  <div key={gk} className="rounded-lg border p-4 space-y-4">
-                    <div className="flex flex-wrap gap-4 items-center">
-                      <div className="font-semibold">{title}</div>
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          id={`dnf-${gk}`}
-                          checked={outcome.doesNotOffer}
-                          onCheckedChange={(checked) =>
-                            setMpdDraft((p) =>
-                              !p
-                                ? p
-                                : {
-                                    ...p,
-                                    results: {
-                                      ...p.results,
-                                      [gk]: { ...outcome, doesNotOffer: Boolean(checked) },
-                                    },
-                                  },
-                            )
-                          }
-                        />
-                        <Label htmlFor={`dnf-${gk}`}>School does not offer / no data yet (hides placeholders)</Label>
-                      </div>
-                    </div>
-                    {!outcome.doesNotOffer ? (
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        <div className="space-y-1">
-                          <Label>Year (4 digits)</Label>
-                          <Input
-                            value={outcome.rows[0]?.year ?? ''}
-                            onChange={(e) => updateOutcomeRow(gk, 'year', e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Registered</Label>
-                          <Input
-                            type="number"
-                            value={outcome.rows[0]?.registered ?? 0}
-                            onChange={(e) =>
-                              updateOutcomeRow(gk, 'registered', parseInt(e.target.value, 10) || 0)
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Passed</Label>
-                          <Input
-                            type="number"
-                            value={outcome.rows[0]?.passed ?? 0}
-                            onChange={(e) => updateOutcomeRow(gk, 'passed', parseInt(e.target.value, 10) || 0)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Remarks</Label>
-                          <Input
-                            value={outcome.rows[0]?.remarks ?? ''}
-                            onChange={(e) => updateOutcomeRow(gk, 'remarks', e.target.value)}
-                          />
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+            <CardContent className="space-y-4">
               <div className="space-y-1">
                 <Label>Legal disclaimer footer (see CBSE Annex note)</Label>
                 <textarea

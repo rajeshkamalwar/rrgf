@@ -318,3 +318,628 @@ export function createDocumentCategory(
     newId: id,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Appendix-IX V2: unified sections[] payload (schemaVersion 2)
+// ---------------------------------------------------------------------------
+
+export type MpdSectionFieldType = 'text' | 'url' | 'email' | 'phone' | 'address' | 'number' | 'boolean';
+
+export type MpdSectionType =
+  | 'table'
+  | 'document_list'
+  | 'staff_table'
+  | 'result_table'
+  | 'infra_table'
+  | 'freetext';
+
+export interface MpdSectionField {
+  id: string;
+  label: string;
+  value: string;
+  type: MpdSectionFieldType;
+  hint?: string;
+  linkable?: boolean;
+}
+
+export interface MpdResultYearRow {
+  year: string;
+  registered: number;
+  passed: number;
+  remarks: string;
+}
+
+export interface MpdResultClass {
+  id: string;
+  label: string;
+  doesNotOffer: boolean;
+  remark: string;
+  rows: MpdResultYearRow[];
+}
+
+export interface MpdSection {
+  id: string;
+  letter: string;
+  title: string;
+  sortOrder: number;
+  type: MpdSectionType;
+  visible: boolean;
+  fields?: MpdSectionField[];
+  segments?: MpdDocumentSegment[];
+  staffFields?: MpdSectionField[];
+  teacherListUrl?: string;
+  classes?: MpdResultClass[];
+  /** e.g. "academic" — supporting PDF rows for result tables */
+  supportingDocsCategoryId?: string;
+  infraFields?: MpdSectionField[];
+  youtubeInspectionUrl?: string;
+  infraDocLink?: string;
+  content?: string;
+}
+
+export interface MpdPayloadV2 {
+  schemaVersion: 2;
+  sections: MpdSection[];
+  legalDisclaimer: string;
+  complianceDeadline: string;
+  directiveReference: string;
+}
+
+export function isMpdPayloadV2(x: unknown): x is MpdPayloadV2 {
+  if (!x || typeof x !== 'object') return false;
+  const o = x as Record<string, unknown>;
+  return o.schemaVersion === 2 && Array.isArray(o.sections);
+}
+
+/** Infer field editor/display type from legacy Section A label (migration). */
+export function inferMpdFieldTypeFromLabel(label: string): MpdSectionFieldType {
+  const u = label.toUpperCase();
+  if (u.includes('EMAIL')) return 'email';
+  if (u.includes('CONTACT') || u.includes('MOBILE') || u.includes('PHONE')) return 'phone';
+  if (u.includes('ADDRESS') || u.includes('PIN')) return 'address';
+  if (u.includes('URL') || u.includes('WEBSITE')) return 'url';
+  return 'text';
+}
+
+function migrateSectionARowToFields(
+  rows: unknown,
+): MpdSectionField[] {
+  if (!Array.isArray(rows)) return [];
+  const out: MpdSectionField[] = [];
+  let n = 1;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    const label = String(r.information ?? '').trim();
+    if (!label) continue;
+    const id = slugifySectionId(String(r.sno ?? `row_${n}`)) || `row_${n}`;
+    out.push({
+      id,
+      label,
+      value: String(r.details ?? ''),
+      type: inferMpdFieldTypeFromLabel(label),
+    });
+    n++;
+  }
+  return out;
+}
+
+function staffObjectToFields(staff: Record<string, unknown> | undefined): MpdSectionField[] {
+  const s = staff ?? {};
+  const defs: { id: string; label: string }[] = [
+    { id: 'pgt', label: 'PGT' },
+    { id: 'tgt', label: 'TGT' },
+    { id: 'prt', label: 'PRT' },
+    { id: 'teacherSectionRatio', label: 'Teachers Section Ratio' },
+    { id: 'specialEducator', label: 'Special Educator' },
+    { id: 'counsellor', label: 'Counsellor / Wellness Teacher' },
+  ];
+  return defs.map((d) => ({
+    id: d.id,
+    label: d.label,
+    value: String(s[d.id] ?? (d.id === 'teacherSectionRatio' ? '1:1.5' : '0')),
+    type: d.id === 'teacherSectionRatio' ? 'text' : 'number',
+  }));
+}
+
+function infrastructureToFields(infra: Record<string, unknown> | undefined): {
+  fields: MpdSectionField[];
+  youtube: string;
+  infraDocLink: string;
+} {
+  const i = infra ?? {};
+  const yt = String(i.youtubeInspectionUrl ?? '');
+  const doc = String(i.infrastructureDocLink ?? '');
+  const fields: MpdSectionField[] = [
+    {
+      id: 'campus_area_sq_mtr',
+      label: 'TOTAL CAMPUS AREA OF THE SCHOOL (IN SQUARE MTR)',
+      value: String(i.campusAreaSqMtr ?? ''),
+      type: 'number',
+    },
+    {
+      id: 'classrooms',
+      label: 'NO. AND SIZE OF THE CLASS ROOMS (IN SQ MTR)',
+      value: `${i.classroomCount ?? ''} (each ${i.classroomSizeSqMtr ?? ''} sq mtr)`,
+      type: 'text',
+    },
+    {
+      id: 'labs',
+      label: 'NO. AND SIZE OF LABORATORIES INCLUDING COMPUTER LABS (IN SQ MTR)',
+      value: `${String(i.labCount ?? '').padStart(2, '0')} (each ${i.labSizeSqMtr ?? ''} sq mtr)`,
+      type: 'text',
+    },
+    {
+      id: 'internet_facility',
+      label: 'INTERNET FACILITY',
+      value: i.internetFacility ? 'true' : 'false',
+      type: 'boolean',
+    },
+    {
+      id: 'girls_toilets',
+      label: 'NO. OF GIRLS TOILETS',
+      value: String(i.girlsToilets ?? ''),
+      type: 'number',
+    },
+    {
+      id: 'boys_toilets',
+      label: 'NO. OF BOYS TOILETS',
+      value: String(i.boysToilets ?? ''),
+      type: 'number',
+    },
+    {
+      id: 'additional_facilities',
+      label: 'ADDITIONAL FACILITIES (AS APPLICABLE)',
+      value: String(i.additionalFacilities ?? ''),
+      type: 'text',
+    },
+  ];
+  return { fields, youtube: yt, infraDocLink: doc };
+}
+
+function migrateResultsToClasses(results: unknown): MpdResultClass[] {
+  if (!results || typeof results !== 'object') {
+    return [
+      {
+        id: 'class_x',
+        label: 'RESULT: CLASS X',
+        doesNotOffer: true,
+        remark: 'NA',
+        rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
+      },
+      {
+        id: 'class_xii',
+        label: 'RESULT: CLASS XII',
+        doesNotOffer: true,
+        remark: 'NA',
+        rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
+      },
+    ];
+  }
+  const r = results as Record<string, unknown>;
+  const cx = r.classX as Record<string, unknown> | undefined;
+  const cxii =
+    (r.classXII as Record<string, unknown> | undefined) ||
+    (r['class XII'] as Record<string, unknown> | undefined);
+  const rowFrom = (o: Record<string, unknown> | undefined, fallback: MpdResultYearRow) => {
+    const rows = Array.isArray(o?.rows) ? o.rows : [];
+    const first = rows[0] as Record<string, unknown> | undefined;
+    return {
+      year: String(first?.year ?? fallback.year),
+      registered: Number(first?.registered ?? fallback.registered) || 0,
+      passed: Number(first?.passed ?? fallback.passed) || 0,
+      remarks: String(first?.remarks ?? fallback.remarks),
+    };
+  };
+  return [
+    {
+      id: 'class_x',
+      label: 'RESULT: CLASS X',
+      doesNotOffer: Boolean(cx?.doesNotOffer ?? true),
+      remark: String(cx?.remark ?? 'NA'),
+      rows: [
+        rowFrom(cx, { year: '', registered: 0, passed: 0, remarks: 'NA' }),
+      ],
+    },
+    {
+      id: 'class_xii',
+      label: 'RESULT: CLASS XII',
+      doesNotOffer: Boolean(cxii?.doesNotOffer ?? true),
+      remark: String(cxii?.remark ?? 'NA'),
+      rows: [
+        rowFrom(cxii, { year: '', registered: 0, passed: 0, remarks: 'NA' }),
+      ],
+    },
+  ];
+}
+
+/** Convert legacy flat Appendix-IX payload (V1) into schemaVersion 2. */
+export function migratePayloadV1toV2(v1: Record<string, unknown>): MpdPayloadV2 {
+  const documentSecs = normalizeDocumentSections(v1.documentSections);
+  const legalDisclaimer = String(v1.legalDisclaimer ?? '').trim()
+    ? String(v1.legalDisclaimer)
+    : 'Note: THE SCHOOL NEEDS TO UPLOAD SELF-ATTESTED COPIES OF ABOVE LISTED DOCUMENTS BY CHAIRMAN/MANAGER/SECRETARY AND PRINCIPAL. IN CASE IT IS NOTICED AT LATER STAGE THAT UPLOADED DOCUMENTS ARE NOT GENUINE THEN SCHOOL SHALL BE LIABLE FOR ACTION AS PER NORMS.';
+  const complianceDeadline = String(v1.complianceDeadline ?? '2026-05-21');
+  const directiveReference = String(
+    v1.directiveReference ?? 'CBSE/MPD/AFF./2026 dated 06.05.2026',
+  );
+
+  const infraSrc =
+    v1.infrastructure && typeof v1.infrastructure === 'object'
+      ? (v1.infrastructure as Record<string, unknown>)
+      : {};
+  const { fields: infraFields, youtube, infraDocLink } = infrastructureToFields(infraSrc);
+
+  const staffSrc =
+    v1.staff && typeof v1.staff === 'object' ? (v1.staff as Record<string, unknown>) : {};
+
+  const infraCategory = documentSecs.find((s) => s.id === 'infrastructure');
+  const docListsBeforeResults = documentSecs.filter((s) => s.id !== 'infrastructure');
+
+  const sections: MpdSection[] = [];
+  let order = 1;
+
+  sections.push({
+    id: 'general_information',
+    letter: 'A',
+    title: 'General Information',
+    sortOrder: order++,
+    type: 'table',
+    visible: true,
+    fields: migrateSectionARowToFields(v1.sectionA),
+  });
+
+  for (const ds of docListsBeforeResults) {
+    sections.push({
+      id: ds.id,
+      letter: ds.letter,
+      title: ds.title,
+      sortOrder: order++,
+      type: 'document_list',
+      visible: true,
+      segments: ds.segments.map((s) => ({ ...s, keywords: [...s.keywords] })),
+    });
+  }
+
+  sections.push({
+    id: 'results',
+    letter: 'C',
+    title: 'Board exam results',
+    sortOrder: order++,
+    type: 'result_table',
+    visible: true,
+    classes: migrateResultsToClasses(v1.results),
+    supportingDocsCategoryId: 'academic',
+  });
+
+  sections.push({
+    id: 'staff_teaching',
+    letter: 'D',
+    title: 'Staff (Teaching)',
+    sortOrder: order++,
+    type: 'staff_table',
+    visible: true,
+    staffFields: staffObjectToFields(staffSrc),
+    teacherListUrl: typeof v1.teacherListUrl === 'string' ? v1.teacherListUrl : '',
+  });
+
+  sections.push({
+    id: 'infrastructure_numeric',
+    letter: 'E',
+    title: 'School Infrastructure (parameters)',
+    sortOrder: order++,
+    type: 'infra_table',
+    visible: true,
+    infraFields,
+    youtubeInspectionUrl: youtube,
+    infraDocLink: infraDocLink || '/documents/infradoc.jpeg',
+  });
+
+  if (infraCategory) {
+    sections.push({
+      id: infraCategory.id,
+      letter: infraCategory.letter,
+      title: infraCategory.title,
+      sortOrder: order++,
+      type: 'document_list',
+      visible: true,
+      segments: infraCategory.segments.map((s) => ({ ...s, keywords: [...s.keywords] })),
+    });
+  }
+
+  return {
+    schemaVersion: 2,
+    sections,
+    legalDisclaimer,
+    complianceDeadline,
+    directiveReference,
+  };
+}
+
+function defaultResultClasses(): MpdResultClass[] {
+  return migrateResultsToClasses(null);
+}
+
+/** Canonical default V2 payload (matches former V1 defaults). */
+export function createDefaultMpdPayloadV2(): MpdPayloadV2 {
+  const v1: Record<string, unknown> = {
+    documentSections: DEFAULT_DOCUMENT_SECTIONS,
+    sectionA: [
+      { sno: '1', information: 'NAME OF THE SCHOOL', details: 'RR GREENFIELD INTERNATIONAL SCHOOL' },
+      {
+        sno: '2',
+        information: 'AFFILIATION NO. (IF APPLICABLE)',
+        details: 'As applicable / update from affiliation letter',
+      },
+      { sno: '3', information: 'SCHOOL CODE (IF APPLICABLE)', details: '21311612021919150645' },
+      {
+        sno: '4',
+        information: 'COMPLETE ADDRESS WITH PIN CODE',
+        details: 'New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar',
+      },
+      { sno: '5', information: 'NAME OF PRINCIPAL', details: 'Rakesh Ranjan' },
+      { sno: '6', information: 'PRINCIPAL QUALIFICATION', details: 'M.A., B.Ed.' },
+      { sno: '7', information: 'SCHOOL EMAIL ID', details: 'rrgreenfieldsch@gmail.com' },
+      { sno: '8', information: 'CONTACT DETAILS (MOBILE)', details: '7903059909, 8210215818' },
+    ],
+    staff: {
+      pgt: 0,
+      tgt: 6,
+      prt: 8,
+      teacherSectionRatio: '1:1.5',
+      specialEducator: 1,
+      counsellor: 1,
+    },
+    teacherListUrl: '',
+    infrastructure: {
+      campusAreaSqMtr: 6070.28,
+      classroomCount: 22,
+      classroomSizeSqMtr: 47,
+      labCount: 6,
+      labSizeSqMtr: 56,
+      internetFacility: true,
+      girlsToilets: 14,
+      boysToilets: 16,
+      youtubeInspectionUrl: '',
+      additionalFacilities:
+        'Library: 112 sq mtr, Sick Room: 33 sq mtr, Sports & Games Room: 119 sq mtr, Arts & Music Room: 32 sq mtr',
+      infrastructureDocLink: '/documents/infradoc.jpeg',
+    },
+    results: {
+      classX: {
+        doesNotOffer: true,
+        remark: 'NA',
+        rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
+      },
+      classXII: {
+        doesNotOffer: true,
+        remark: 'NA',
+        rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
+      },
+    },
+    legalDisclaimer:
+      'Note: THE SCHOOL NEEDS TO UPLOAD SELF-ATTESTED COPIES OF ABOVE LISTED DOCUMENTS BY CHAIRMAN/MANAGER/SECRETARY AND PRINCIPAL. IN CASE IT IS NOTICED AT LATER STAGE THAT UPLOADED DOCUMENTS ARE NOT GENUINE THEN SCHOOL SHALL BE LIABLE FOR ACTION AS PER NORMS.',
+    complianceDeadline: '2026-05-21',
+    directiveReference: 'CBSE/MPD/AFF./2026 dated 06.05.2026',
+  };
+  return migratePayloadV1toV2(v1);
+}
+
+function normalizeSectionField(f: unknown, fallbackId: string): MpdSectionField {
+  if (!f || typeof f !== 'object') {
+    return { id: fallbackId, label: '', value: '', type: 'text' };
+  }
+  const r = f as Record<string, unknown>;
+  const id = slugifySectionId(String(r.id ?? fallbackId)) || fallbackId;
+  const type = (String(r.type ?? 'text') as MpdSectionFieldType) || 'text';
+  const allowed: MpdSectionFieldType[] = ['text', 'url', 'email', 'phone', 'address', 'number', 'boolean'];
+  return {
+    id,
+    label: String(r.label ?? '').trim(),
+    value: String(r.value ?? ''),
+    type: allowed.includes(type) ? type : 'text',
+    hint: r.hint !== undefined ? String(r.hint) : undefined,
+    linkable: r.linkable === true,
+  };
+}
+
+function normalizeResultClass(c: unknown, idx: number): MpdResultClass {
+  if (!c || typeof c !== 'object') {
+    return {
+      id: `class_${idx}`,
+      label: `Class ${idx + 1}`,
+      doesNotOffer: false,
+      remark: '',
+      rows: [{ year: '', registered: 0, passed: 0, remarks: '' }],
+    };
+  }
+  const r = c as Record<string, unknown>;
+  const rowsRaw = Array.isArray(r.rows) ? r.rows : [];
+  const rows: MpdResultYearRow[] = rowsRaw.map((row, j) => {
+    if (!row || typeof row !== 'object') {
+      return { year: '', registered: 0, passed: 0, remarks: '' };
+    }
+    const x = row as Record<string, unknown>;
+    return {
+      year: String(x.year ?? ''),
+      registered: Number(x.registered ?? 0) || 0,
+      passed: Number(x.passed ?? 0) || 0,
+      remarks: String(x.remarks ?? ''),
+    };
+  });
+  if (!rows.length) rows.push({ year: '', registered: 0, passed: 0, remarks: '' });
+  return {
+    id: slugifySectionId(String(r.id ?? `class_${idx}`)) || `class_${idx}`,
+    label: String(r.label ?? `Class ${idx + 1}`),
+    doesNotOffer: Boolean(r.doesNotOffer),
+    remark: String(r.remark ?? ''),
+    rows,
+  };
+}
+
+/** Normalize / repair one section record from API or editor. */
+export function normalizeMpdSection(sec: unknown, index: number): MpdSection {
+  if (!sec || typeof sec !== 'object') {
+    return {
+      id: `section_${index + 1}`,
+      letter: 'A',
+      title: 'Section',
+      sortOrder: index + 1,
+      type: 'freetext',
+      visible: true,
+      content: '',
+    };
+  }
+  const r = sec as Record<string, unknown>;
+  const type = String(r.type ?? 'table') as MpdSectionType;
+  const types: MpdSectionType[] = [
+    'table',
+    'document_list',
+    'staff_table',
+    'result_table',
+    'infra_table',
+    'freetext',
+  ];
+  const id = slugifySectionId(String(r.id ?? `section_${index + 1}`)) || `section_${index + 1}`;
+  const base: MpdSection = {
+    id,
+    letter: String(r.letter ?? '').trim().toUpperCase().slice(0, 3),
+    title: String(r.title ?? id).trim(),
+    sortOrder: Number(r.sortOrder ?? index + 1),
+    type: types.includes(type) ? type : 'table',
+    visible: r.visible !== false,
+  };
+  if (base.type === 'table' && Array.isArray(r.fields)) {
+    base.fields = r.fields.map((f, i) => normalizeSectionField(f, `field_${i + 1}`));
+  }
+  if (base.type === 'document_list') {
+    const rawSeg = Array.isArray(r.segments) ? r.segments : [];
+    const wrapped = normalizeDocumentSections([
+      {
+        id: base.id,
+        letter: base.letter,
+        title: base.title,
+        sortOrder: base.sortOrder,
+        segments: rawSeg as MpdDocumentSegment[],
+      },
+    ]);
+    base.segments = wrapped[0]?.segments ?? [];
+  }
+  if (base.type === 'staff_table') {
+    base.teacherListUrl = typeof r.teacherListUrl === 'string' ? r.teacherListUrl : '';
+    if (Array.isArray(r.staffFields)) {
+      base.staffFields = r.staffFields.map((f, i) => normalizeSectionField(f, `staff_${i + 1}`));
+    }
+  }
+  if (base.type === 'result_table') {
+    base.supportingDocsCategoryId =
+      typeof r.supportingDocsCategoryId === 'string' ? r.supportingDocsCategoryId : 'academic';
+    if (Array.isArray(r.classes)) {
+      base.classes = r.classes.map((c, i) => normalizeResultClass(c, i));
+    } else {
+      base.classes = defaultResultClasses();
+    }
+  }
+  if (base.type === 'infra_table') {
+    base.youtubeInspectionUrl = typeof r.youtubeInspectionUrl === 'string' ? r.youtubeInspectionUrl : '';
+    base.infraDocLink = typeof r.infraDocLink === 'string' ? r.infraDocLink : '';
+    if (Array.isArray(r.infraFields)) {
+      base.infraFields = r.infraFields.map((f, i) => normalizeSectionField(f, `infra_${i + 1}`));
+    }
+  }
+  if (base.type === 'freetext') {
+    base.content = typeof r.content === 'string' ? r.content : '';
+  }
+  return base;
+}
+
+/** Sort sections by sortOrder for public display. */
+export function sortMpdSections(sections: MpdSection[]): MpdSection[] {
+  return [...sections].sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/** Full V2 payload normalization (defaults merged). */
+export function normalizeMpdPayloadV2(raw: unknown): MpdPayloadV2 {
+  const defaults = createDefaultMpdPayloadV2();
+  if (!raw || typeof raw !== 'object') return defaults;
+  const o = raw as Record<string, unknown>;
+  const sectionsIn = Array.isArray(o.sections) ? o.sections : [];
+  const normalizedSections =
+    sectionsIn.length > 0
+      ? sectionsIn.map((s, i) => normalizeMpdSection(s, i))
+      : defaults.sections;
+  const sorted = sortMpdSections(normalizedSections).map((s, i) => ({ ...s, sortOrder: i + 1 }));
+  return {
+    schemaVersion: 2,
+    sections: sorted,
+    legalDisclaimer:
+      typeof o.legalDisclaimer === 'string' && o.legalDisclaimer.trim()
+        ? String(o.legalDisclaimer)
+        : defaults.legalDisclaimer,
+    complianceDeadline:
+      typeof o.complianceDeadline === 'string' && o.complianceDeadline.trim()
+        ? String(o.complianceDeadline)
+        : defaults.complianceDeadline,
+    directiveReference:
+      typeof o.directiveReference === 'string' && o.directiveReference.trim()
+        ? String(o.directiveReference)
+        : defaults.directiveReference,
+  };
+}
+
+/**
+ * Accept either V1 or V2 API payload and return normalized V2.
+ */
+export function normalizeFullMpdPayload(raw: unknown): MpdPayloadV2 {
+  if (!raw || typeof raw !== 'object') return createDefaultMpdPayloadV2();
+  const o = raw as Record<string, unknown>;
+  if (isMpdPayloadV2(o)) {
+    return normalizeMpdPayloadV2(o);
+  }
+  return normalizeMpdPayloadV2(migratePayloadV1toV2(o));
+}
+
+/** Map document_list sections to legacy shape for MpdCategoryManager / segment helpers. */
+export function documentListSectionsAsDocumentSections(sections: MpdSection[]): MpdDocumentSection[] {
+  return sortMpdSections(sections.filter((s) => s.type === 'document_list')).map((s) => ({
+    id: s.id,
+    letter: s.letter,
+    title: s.title,
+    sortOrder: s.sortOrder,
+    segments: (s.segments ?? []).map((seg) => ({ ...seg, keywords: [...seg.keywords] })),
+  }));
+}
+
+/** Replace all `document_list` sections (admin “categories” editor) while keeping other section types. */
+export function replaceDocumentListSections(
+  sections: MpdSection[],
+  categories: MpdDocumentSection[],
+): MpdSection[] {
+  const others = sections.filter((s) => s.type !== 'document_list');
+  const docLists: MpdSection[] = categories.map((c) => ({
+    id: c.id,
+    letter: c.letter,
+    title: c.title,
+    sortOrder: Number(c.sortOrder) || 1,
+    type: 'document_list',
+    visible: true,
+    segments: c.segments.map((s) => ({ ...s, keywords: [...s.keywords] })),
+  }));
+  return sortMpdSections([...others, ...docLists]).map((s, i) => ({ ...s, sortOrder: i + 1 }));
+}
+
+export function getTeacherListUrlFromSections(sections: MpdSection[]): string {
+  const staff = sections.find((s) => s.type === 'staff_table');
+  return (staff?.teacherListUrl ?? '').trim();
+}
+
+export function setTeacherListUrlInSections(sections: MpdSection[], url: string): MpdSection[] {
+  let found = false;
+  const next = sections.map((s) => {
+    if (s.type !== 'staff_table') return s;
+    found = true;
+    return { ...s, teacherListUrl: url };
+  });
+  if (!found) return next;
+  return next;
+}

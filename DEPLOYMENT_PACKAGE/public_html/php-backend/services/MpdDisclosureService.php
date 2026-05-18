@@ -2,6 +2,7 @@
 
 /**
  * CBSE Appendix-IX style mandatory public disclosure payload (single-school row JSON).
+ * Schema V2: unified `sections[]` array (schemaVersion 2).
  */
 
 class MpdDisclosureService
@@ -16,7 +17,8 @@ class MpdDisclosureService
         }
     }
 
-    public static function getDefaultPayload(): array
+    /** Legacy flat payload (V1) used only to seed migrations / defaults. */
+    private static function getLegacyV1Defaults(): array
     {
         return [
             'sectionA' => [
@@ -47,7 +49,6 @@ class MpdDisclosureService
                 'internetFacility' => true,
                 'girlsToilets' => 14,
                 'boysToilets' => 16,
-                /** CBSE SARAS uploads often contain malformed text like "wwwyoutubecom"; leave empty until a valid inspection URL exists */
                 'youtubeInspectionUrl' => '',
                 'additionalFacilities' => 'Library: 112 sq mtr, Sick Room: 33 sq mtr, Sports & Games Room: 119 sq mtr, Arts & Music Room: 32 sq mtr',
                 'infrastructureDocLink' => '/documents/infradoc.jpeg',
@@ -69,11 +70,306 @@ class MpdDisclosureService
                 ],
             ],
             'legalDisclaimer' => 'Note: THE SCHOOL NEEDS TO UPLOAD SELF-ATTESTED COPIES OF ABOVE LISTED DOCUMENTS BY CHAIRMAN/MANAGER/SECRETARY AND PRINCIPAL. IN CASE IT IS NOTICED AT LATER STAGE THAT UPLOADED DOCUMENTS ARE NOT GENUINE THEN SCHOOL SHALL BE LIABLE FOR ACTION AS PER NORMS.',
-            /** Reference: CBSE/MPD/AFF./2026 — adjust if needed after official communication */
             'complianceDeadline' => '2026-05-21',
-            /** Directive date from CBSE communication */
             'directiveReference' => 'CBSE/MPD/AFF./2026 dated 06.05.2026',
             'documentSections' => self::getDefaultDocumentSections(),
+        ];
+    }
+
+    public static function getDefaultPayload(): array
+    {
+        return self::migrateV1toV2(self::getLegacyV1Defaults());
+    }
+
+    public static function isSchemaV2(array $payload): bool
+    {
+        return (int) ($payload['schemaVersion'] ?? 0) === 2
+            && isset($payload['sections'])
+            && is_array($payload['sections']);
+    }
+
+    /** Convert V1 flat payload to V2 sections[] payload. */
+    public static function migrateV1toV2(array $v1): array
+    {
+        $docSecs = self::normalizeDocumentSections($v1['documentSections'] ?? []);
+        $legal = trim((string) ($v1['legalDisclaimer'] ?? ''));
+        if ($legal === '') {
+            $legal = self::getLegacyV1Defaults()['legalDisclaimer'];
+        }
+        $deadline = (string) ($v1['complianceDeadline'] ?? '2026-05-21');
+        $directive = (string) ($v1['directiveReference'] ?? 'CBSE/MPD/AFF./2026 dated 06.05.2026');
+
+        $infra = is_array($v1['infrastructure'] ?? null) ? $v1['infrastructure'] : [];
+        $infraPack = self::infrastructureObjectToInfraTable($infra);
+
+        $staff = is_array($v1['staff'] ?? null) ? $v1['staff'] : [];
+        $teacherList = isset($v1['teacherListUrl']) ? (string) $v1['teacherListUrl'] : '';
+
+        $sections = [];
+        $order = 1;
+
+        $sections[] = [
+            'id' => 'general_information',
+            'letter' => 'A',
+            'title' => 'General Information',
+            'sortOrder' => $order++,
+            'type' => 'table',
+            'visible' => true,
+            'fields' => self::sectionAToFields($v1['sectionA'] ?? []),
+        ];
+
+        $infraCategory = null;
+        $docBefore = [];
+        foreach ($docSecs as $ds) {
+            if (($ds['id'] ?? '') === 'infrastructure') {
+                $infraCategory = $ds;
+            } else {
+                $docBefore[] = $ds;
+            }
+        }
+
+        foreach ($docBefore as $ds) {
+            $sections[] = [
+                'id' => $ds['id'],
+                'letter' => $ds['letter'],
+                'title' => $ds['title'],
+                'sortOrder' => $order++,
+                'type' => 'document_list',
+                'visible' => true,
+                'segments' => $ds['segments'],
+            ];
+        }
+
+        $sections[] = [
+            'id' => 'results',
+            'letter' => 'C',
+            'title' => 'Board exam results',
+            'sortOrder' => $order++,
+            'type' => 'result_table',
+            'visible' => true,
+            'classes' => self::resultsToClasses($v1['results'] ?? []),
+            'supportingDocsCategoryId' => 'academic',
+        ];
+
+        $sections[] = [
+            'id' => 'staff_teaching',
+            'letter' => 'D',
+            'title' => 'Staff (Teaching)',
+            'sortOrder' => $order++,
+            'type' => 'staff_table',
+            'visible' => true,
+            'staffFields' => self::staffObjectToFields($staff),
+            'teacherListUrl' => $teacherList,
+        ];
+
+        $sections[] = [
+            'id' => 'infrastructure_numeric',
+            'letter' => 'E',
+            'title' => 'School Infrastructure (parameters)',
+            'sortOrder' => $order++,
+            'type' => 'infra_table',
+            'visible' => true,
+            'infraFields' => $infraPack['fields'],
+            'youtubeInspectionUrl' => $infraPack['youtube'],
+            'infraDocLink' => $infraPack['infraDocLink'],
+        ];
+
+        if ($infraCategory !== null) {
+            $sections[] = [
+                'id' => $infraCategory['id'],
+                'letter' => $infraCategory['letter'],
+                'title' => $infraCategory['title'],
+                'sortOrder' => $order++,
+                'type' => 'document_list',
+                'visible' => true,
+                'segments' => $infraCategory['segments'],
+            ];
+        }
+
+        return [
+            'schemaVersion' => 2,
+            'sections' => $sections,
+            'legalDisclaimer' => $legal,
+            'complianceDeadline' => $deadline,
+            'directiveReference' => $directive,
+        ];
+    }
+
+    private static function inferFieldType(string $label): string
+    {
+        $u = strtoupper($label);
+        if (strpos($u, 'EMAIL') !== false) {
+            return 'email';
+        }
+        if (strpos($u, 'CONTACT') !== false || strpos($u, 'MOBILE') !== false || strpos($u, 'PHONE') !== false) {
+            return 'phone';
+        }
+        if (strpos($u, 'ADDRESS') !== false || strpos($u, 'PIN') !== false) {
+            return 'address';
+        }
+        if (strpos($u, 'URL') !== false || strpos($u, 'WEBSITE') !== false) {
+            return 'url';
+        }
+
+        return 'text';
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private static function sectionAToFields($rows): array
+    {
+        if (!is_array($rows)) {
+            return [];
+        }
+        $out = [];
+        $n = 1;
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $label = trim((string) ($row['information'] ?? ''));
+            if ($label === '') {
+                continue;
+            }
+            $sno = (string) ($row['sno'] ?? $n);
+            $id = self::slugifySectionId($sno) ?: ('row_' . $n);
+            $out[] = [
+                'id' => $id,
+                'label' => $label,
+                'value' => (string) ($row['details'] ?? ''),
+                'type' => self::inferFieldType($label),
+            ];
+            $n++;
+        }
+
+        return $out;
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private static function staffObjectToFields(array $s): array
+    {
+        $defs = [
+            ['id' => 'pgt', 'label' => 'PGT', 'key' => 'pgt'],
+            ['id' => 'tgt', 'label' => 'TGT', 'key' => 'tgt'],
+            ['id' => 'prt', 'label' => 'PRT', 'key' => 'prt'],
+            ['id' => 'teacherSectionRatio', 'label' => 'Teachers Section Ratio', 'key' => 'teacherSectionRatio'],
+            ['id' => 'specialEducator', 'label' => 'Special Educator', 'key' => 'specialEducator'],
+            ['id' => 'counsellor', 'label' => 'Counsellor / Wellness Teacher', 'key' => 'counsellor'],
+        ];
+        $out = [];
+        foreach ($defs as $d) {
+            $key = $d['key'];
+            $val = $s[$key] ?? ($key === 'teacherSectionRatio' ? '1:1.5' : 0);
+            $out[] = [
+                'id' => $d['id'],
+                'label' => $d['label'],
+                'value' => (string) $val,
+                'type' => $key === 'teacherSectionRatio' ? 'text' : 'number',
+            ];
+        }
+
+        return $out;
+    }
+
+    /** @return array{fields: array<int,array<string,mixed>>, youtube: string, infraDocLink: string} */
+    private static function infrastructureObjectToInfraTable(array $i): array
+    {
+        $yt = (string) ($i['youtubeInspectionUrl'] ?? '');
+        $doc = (string) ($i['infrastructureDocLink'] ?? '');
+        $labCount = $i['labCount'] ?? 0;
+        $labPad = str_pad((string) $labCount, 2, '0', STR_PAD_LEFT);
+
+        $fields = [
+            [
+                'id' => 'campus_area_sq_mtr',
+                'label' => 'TOTAL CAMPUS AREA OF THE SCHOOL (IN SQUARE MTR)',
+                'value' => (string) ($i['campusAreaSqMtr'] ?? ''),
+                'type' => 'number',
+            ],
+            [
+                'id' => 'classrooms',
+                'label' => 'NO. AND SIZE OF THE CLASS ROOMS (IN SQ MTR)',
+                'value' => ($i['classroomCount'] ?? '') . ' (each ' . ($i['classroomSizeSqMtr'] ?? '') . ' sq mtr)',
+                'type' => 'text',
+            ],
+            [
+                'id' => 'labs',
+                'label' => 'NO. AND SIZE OF LABORATORIES INCLUDING COMPUTER LABS (IN SQ MTR)',
+                'value' => $labPad . ' (each ' . ($i['labSizeSqMtr'] ?? '') . ' sq mtr)',
+                'type' => 'text',
+            ],
+            [
+                'id' => 'internet_facility',
+                'label' => 'INTERNET FACILITY',
+                'value' => !empty($i['internetFacility']) ? 'true' : 'false',
+                'type' => 'boolean',
+            ],
+            [
+                'id' => 'girls_toilets',
+                'label' => 'NO. OF GIRLS TOILETS',
+                'value' => (string) ($i['girlsToilets'] ?? ''),
+                'type' => 'number',
+            ],
+            [
+                'id' => 'boys_toilets',
+                'label' => 'NO. OF BOYS TOILETS',
+                'value' => (string) ($i['boysToilets'] ?? ''),
+                'type' => 'number',
+            ],
+            [
+                'id' => 'additional_facilities',
+                'label' => 'ADDITIONAL FACILITIES (AS APPLICABLE)',
+                'value' => (string) ($i['additionalFacilities'] ?? ''),
+                'type' => 'text',
+            ],
+        ];
+
+        return [
+            'fields' => $fields,
+            'youtube' => $yt,
+            'infraDocLink' => $doc !== '' ? $doc : '/documents/infradoc.jpeg',
+        ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private static function resultsToClasses($results): array
+    {
+        if (!is_array($results)) {
+            $results = [];
+        }
+        $cx = is_array($results['classX'] ?? null) ? $results['classX'] : [];
+        $cxii = is_array($results['classXII'] ?? null) ? $results['classXII'] : [];
+        if (!$cxii && is_array($results['class XII'] ?? null)) {
+            $cxii = $results['class XII'];
+        }
+
+        $rowFrom = static function ($o, $fallback) {
+            $rows = is_array($o['rows'] ?? null) ? $o['rows'] : [];
+            $first = is_array($rows[0] ?? null) ? $rows[0] : [];
+
+            return [
+                'year' => (string) ($first['year'] ?? $fallback['year']),
+                'registered' => (int) ($first['registered'] ?? $fallback['registered']),
+                'passed' => (int) ($first['passed'] ?? $fallback['passed']),
+                'remarks' => (string) ($first['remarks'] ?? $fallback['remarks']),
+            ];
+        };
+        $fb = ['year' => '', 'registered' => 0, 'passed' => 0, 'remarks' => 'NA'];
+
+        return [
+            [
+                'id' => 'class_x',
+                'label' => 'RESULT: CLASS X',
+                'doesNotOffer' => !empty($cx['doesNotOffer']),
+                'remark' => (string) ($cx['remark'] ?? 'NA'),
+                'rows' => [$rowFrom($cx, $fb)],
+            ],
+            [
+                'id' => 'class_xii',
+                'label' => 'RESULT: CLASS XII',
+                'doesNotOffer' => !empty($cxii['doesNotOffer']),
+                'remark' => (string) ($cxii['remark'] ?? 'NA'),
+                'rows' => [$rowFrom($cxii, $fb)],
+            ],
         ];
     }
 
@@ -195,6 +491,7 @@ class MpdDisclosureService
         usort($out, static function ($a, $b) {
             return ($a['sortOrder'] ?? 0) <=> ($b['sortOrder'] ?? 0);
         });
+
         return $out;
     }
 
@@ -203,21 +500,59 @@ class MpdDisclosureService
         $s = strtolower(trim($raw));
         $s = preg_replace('/[^a-z0-9]+/', '_', $s);
         $s = trim($s, '_');
+
         return substr($s, 0, 64);
     }
 
-    /** @return string[] */
+    /**
+     * Document categories allowed for uploads — every `document_list` section id.
+     *
+     * @return string[]
+     */
     public static function allowedCategoryIds(array $payload): array
     {
-        $sections = self::normalizeDocumentSections($payload['documentSections'] ?? []);
+        $sections = self::documentSectionsFromPayload($payload);
+
         return array_values(array_map(static function ($s) {
             return $s['id'];
         }, $sections));
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private static function documentSectionsFromPayload(array $payload): array
+    {
+        if (self::isSchemaV2($payload)) {
+            $out = [];
+            foreach ($payload['sections'] as $sec) {
+                if (!is_array($sec) || ($sec['type'] ?? '') !== 'document_list') {
+                    continue;
+                }
+                $segRaw = $sec['segments'] ?? [];
+                $tmp = [
+                    'id' => self::slugifySectionId((string) ($sec['id'] ?? '')),
+                    'letter' => (string) ($sec['letter'] ?? ''),
+                    'title' => (string) ($sec['title'] ?? ''),
+                    'sortOrder' => (int) ($sec['sortOrder'] ?? count($out) + 1),
+                    'segments' => is_array($segRaw) ? $segRaw : [],
+                ];
+                if ($tmp['id'] === '') {
+                    continue;
+                }
+                $out[] = $tmp;
+            }
+
+            return self::normalizeDocumentSections($out);
+        }
+
+        return self::normalizeDocumentSections($payload['documentSections'] ?? []);
+    }
+
     public static function isAllowedCategory(array $payload, string $category): bool
     {
         $category = self::slugifySectionId($category);
+
         return in_array($category, self::allowedCategoryIds($payload), true);
     }
 
@@ -228,7 +563,7 @@ class MpdDisclosureService
         }
         $category = self::slugifySectionId($category);
         $segmentId = self::slugifySectionId($segmentId);
-        foreach (self::normalizeDocumentSections($payload['documentSections'] ?? []) as $sec) {
+        foreach (self::documentSectionsFromPayload($payload) as $sec) {
             if ($sec['id'] !== $category) {
                 continue;
             }
@@ -237,8 +572,10 @@ class MpdDisclosureService
                     return true;
                 }
             }
+
             return false;
         }
+
         return false;
     }
 
@@ -246,20 +583,20 @@ class MpdDisclosureService
     public static function suggestSegmentId(array $payload, string $category, string $title): ?string
     {
         $category = self::slugifySectionId($category);
-        $sections = self::normalizeDocumentSections($payload['documentSections'] ?? []);
         $hay = strtolower($title);
-        foreach ($sections as $sec) {
+        foreach (self::documentSectionsFromPayload($payload) as $sec) {
             if ($sec['id'] !== $category || empty($sec['segments'])) {
                 continue;
             }
             foreach ($sec['segments'] as $seg) {
                 foreach ($seg['keywords'] ?? [] as $kw) {
-                    if ($kw !== '' && strpos($hay, strtolower($kw)) !== false) {
+                    if ($kw !== '' && strpos($hay, strtolower((string) $kw)) !== false) {
                         return $seg['id'];
                     }
                 }
             }
         }
+
         return null;
     }
 
@@ -310,26 +647,160 @@ class MpdDisclosureService
         if (!$row || empty($row['payload_json'])) {
             $defaults = self::getDefaultPayload();
             self::savePayload($db, $defaults);
+
             return $defaults;
         }
         $decoded = json_decode($row['payload_json'], true);
         if (!is_array($decoded)) {
             return self::getDefaultPayload();
         }
+
         return self::mergeWithDefaults($decoded);
     }
 
-    /** Deep-merge missing keys using defaults without overwriting intentional empty strings unnecessarily */
     private static function mergeWithDefaults(array $incoming): array
     {
-        $defaults = self::getDefaultPayload();
-        $merged = array_replace_recursive($defaults, $incoming);
-        $merged['infrastructure']['youtubeInspectionUrl'] = self::sanitizeYoutubeInspectionUrl($merged['infrastructure']['youtubeInspectionUrl'] ?? '');
-        $merged['documentSections'] = self::normalizeDocumentSections($merged['documentSections'] ?? []);
-        if (!empty($merged['sectionA']) && is_array($merged['sectionA'])) {
-            $merged['sectionA'] = self::normalizeSectionARows($merged['sectionA']);
+        if (!self::isSchemaV2($incoming)) {
+            $incoming = self::migrateV1toV2($incoming);
         }
+        $defaults = self::getDefaultPayload();
+        $merged = $incoming;
+        if (trim((string) ($merged['legalDisclaimer'] ?? '')) === '') {
+            $merged['legalDisclaimer'] = $defaults['legalDisclaimer'];
+        }
+        if (trim((string) ($merged['complianceDeadline'] ?? '')) === '') {
+            $merged['complianceDeadline'] = $defaults['complianceDeadline'];
+        }
+        if (trim((string) ($merged['directiveReference'] ?? '')) === '') {
+            $merged['directiveReference'] = $defaults['directiveReference'];
+        }
+        if (empty($merged['sections']) || !is_array($merged['sections'])) {
+            $merged['sections'] = $defaults['sections'];
+        } else {
+            $merged['sections'] = self::normalizeSectionsV2($merged['sections']);
+        }
+        $merged['schemaVersion'] = 2;
+        foreach ($merged['sections'] as &$sec) {
+            if (!is_array($sec)) {
+                continue;
+            }
+            if (($sec['type'] ?? '') === 'infra_table') {
+                $sec['youtubeInspectionUrl'] = self::sanitizeYoutubeInspectionUrl($sec['youtubeInspectionUrl'] ?? '');
+            }
+        }
+        unset($sec);
+
         return $merged;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $sections
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function normalizeSectionsV2(array $sections): array
+    {
+        $out = [];
+        foreach ($sections as $i => $sec) {
+            if (!is_array($sec)) {
+                continue;
+            }
+            $out[] = self::normalizeOneSection($sec, $i);
+        }
+        usort($out, static function ($a, $b) {
+            return ($a['sortOrder'] ?? 0) <=> ($b['sortOrder'] ?? 0);
+        });
+        $n = 1;
+        foreach ($out as &$s) {
+            $s['sortOrder'] = $n++;
+        }
+        unset($s);
+
+        return $out;
+    }
+
+    /** @param array<string, mixed> $sec */
+    private static function normalizeOneSection(array $sec, int $index): array
+    {
+        $id = self::slugifySectionId((string) ($sec['id'] ?? ('section_' . ($index + 1))));
+        if ($id === '') {
+            $id = 'section_' . ($index + 1);
+        }
+        $type = (string) ($sec['type'] ?? 'table');
+        $allowed = ['table', 'document_list', 'staff_table', 'result_table', 'infra_table', 'freetext'];
+        if (!in_array($type, $allowed, true)) {
+            $type = 'table';
+        }
+        $base = [
+            'id' => $id,
+            'letter' => strtoupper(substr(trim((string) ($sec['letter'] ?? '')), 0, 3)),
+            'title' => trim((string) ($sec['title'] ?? $id)),
+            'sortOrder' => (int) ($sec['sortOrder'] ?? $index + 1),
+            'type' => $type,
+            'visible' => !array_key_exists('visible', $sec) || $sec['visible'] !== false,
+        ];
+        if ($type === 'table' && !empty($sec['fields']) && is_array($sec['fields'])) {
+            $base['fields'] = $sec['fields'];
+        }
+        if ($type === 'document_list') {
+            $wrapped = self::normalizeDocumentSections([
+                [
+                    'id' => $base['id'],
+                    'letter' => $base['letter'],
+                    'title' => $base['title'],
+                    'sortOrder' => $base['sortOrder'],
+                    'segments' => is_array($sec['segments'] ?? null) ? $sec['segments'] : [],
+                ],
+            ]);
+            $base['segments'] = $wrapped[0]['segments'] ?? [];
+        }
+        if ($type === 'staff_table') {
+            $base['teacherListUrl'] = (string) ($sec['teacherListUrl'] ?? '');
+            if (!empty($sec['staffFields']) && is_array($sec['staffFields'])) {
+                $base['staffFields'] = $sec['staffFields'];
+            }
+        }
+        if ($type === 'result_table') {
+            $base['supportingDocsCategoryId'] = (string) ($sec['supportingDocsCategoryId'] ?? 'academic');
+            if (!empty($sec['classes']) && is_array($sec['classes'])) {
+                $base['classes'] = $sec['classes'];
+            }
+        }
+        if ($type === 'infra_table') {
+            $base['youtubeInspectionUrl'] = (string) ($sec['youtubeInspectionUrl'] ?? '');
+            $base['infraDocLink'] = (string) ($sec['infraDocLink'] ?? '');
+            if (!empty($sec['infraFields']) && is_array($sec['infraFields'])) {
+                $base['infraFields'] = $sec['infraFields'];
+            }
+        }
+        if ($type === 'freetext') {
+            $base['content'] = (string) ($sec['content'] ?? '');
+        }
+
+        return $base;
+    }
+
+    /** Apply teacher list URL to first staff_table section (teacher list upload API). */
+    private static function applyTeacherListUrl(array $payload, string $url): array
+    {
+        if (!self::isSchemaV2($payload)) {
+            $payload = self::migrateV1toV2($payload);
+        }
+        if (!isset($payload['sections']) || !is_array($payload['sections'])) {
+            return $payload;
+        }
+        foreach ($payload['sections'] as &$sec) {
+            if (!is_array($sec)) {
+                continue;
+            }
+            if (($sec['type'] ?? '') === 'staff_table') {
+                $sec['teacherListUrl'] = $url;
+                break;
+            }
+        }
+        unset($sec);
+
+        return $payload;
     }
 
     /**
@@ -344,11 +815,27 @@ class MpdDisclosureService
         if (!$incoming || !count($incoming)) {
             throw new Exception('Nothing to save');
         }
+        $teacherIncoming = $incoming['teacherListUrl'] ?? null;
+        $sectionsIncoming = null;
+        if (isset($incoming['sections']) && is_array($incoming['sections'])) {
+            $sectionsIncoming = $incoming['sections'];
+            $incomingCopy = $incoming;
+            unset($incomingCopy['sections']);
+            $incoming = $incomingCopy;
+        }
         $merged = array_replace_recursive($current, $incoming);
-        $merged['infrastructure']['youtubeInspectionUrl'] = self::sanitizeYoutubeInspectionUrl($merged['infrastructure']['youtubeInspectionUrl'] ?? '');
-        $merged['documentSections'] = self::normalizeDocumentSections($merged['documentSections'] ?? []);
-        if (!empty($merged['sectionA']) && is_array($merged['sectionA'])) {
-            $merged['sectionA'] = self::normalizeSectionARows($merged['sectionA']);
+        if (is_array($sectionsIncoming)) {
+            $merged['sections'] = self::normalizeSectionsV2($sectionsIncoming);
+        }
+        if (is_string($teacherIncoming)) {
+            $merged = self::applyTeacherListUrl($merged, $teacherIncoming);
+        }
+        $merged = self::mergeWithDefaults($merged);
+        /** Store V2-only JSON (drop legacy V1 top-level keys if present). */
+        if (self::isSchemaV2($merged)) {
+            foreach (['teacherListUrl', 'sectionA', 'staff', 'infrastructure', 'results', 'documentSections'] as $legacy) {
+                unset($merged[$legacy]);
+            }
         }
         $json = json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         $existing = $db->fetchOne('SELECT id FROM mpd_disclosure WHERE id = 1');
@@ -357,6 +844,7 @@ class MpdDisclosureService
         } else {
             $db->insert('INSERT INTO mpd_disclosure (id, payload_json) VALUES (1, ?)', [$json]);
         }
+
         return $merged;
     }
 
@@ -367,6 +855,7 @@ class MpdDisclosureService
             return [];
         }
         $decoded = json_decode($row['payload_json'], true);
+
         return is_array($decoded) ? $decoded : [];
     }
 
@@ -389,6 +878,7 @@ class MpdDisclosureService
             ];
             $n++;
         }
+
         return $out;
     }
 
@@ -398,6 +888,7 @@ class MpdDisclosureService
             return null;
         }
         $row = $db->fetchOne('SELECT updated_at FROM mpd_disclosure WHERE id = 1');
+
         return $row['updated_at'] ?? null;
     }
 }
