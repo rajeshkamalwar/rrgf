@@ -11,6 +11,9 @@
 
   # php-backend PHP scripts must not be routed to the React SPA
   RewriteRule ^php-backend/ - [L]
+
+  # React admin is client-routed at /backend — never treat a real on-disk "backend/" folder as browsable
+  RewriteRule ^backend(?:/.*)?$ /appentry.php [L,QSA]
   
   # Serve static files directly (don't route to index.html)
   RewriteCond %{REQUEST_FILENAME} -f

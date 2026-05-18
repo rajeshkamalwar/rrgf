@@ -12,15 +12,16 @@ if (-not (Test-Path "$KEY_PATH")) {
     $pubKey = Get-Content "$KEY_PATH.pub"
     Write-Host "Adding key to server (enter your SSH password when prompted)..." -ForegroundColor Yellow
     # ssh-copy-id equivalent for Windows
-    ssh -p $SSH_PORT "${SSH_USER}@${SSH_HOST}" "mkdir -p ~/.ssh && echo '$pubKey' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys && echo 'Key added OK'"
+    ssh -4 -p $SSH_PORT "${SSH_USER}@${SSH_HOST}" "mkdir -p ~/.ssh && echo '$pubKey' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys && echo 'Key added OK'"
     Write-Host "SSH key set up. Future deploys won't ask for a password." -ForegroundColor Green
 }
 
 # ── Deploy ──────────────────────────────────────────────────────────────────
+# Use IPv4 (-4): hostname may resolve to IPv6 where SSH:65002 is closed; IPv4 works (see Test-NetConnection).
 Write-Host "Uploading deploy script..." -ForegroundColor Cyan
-scp -P $SSH_PORT -i $KEY_PATH $SCRIPT "${SSH_USER}@${SSH_HOST}:~/deploy.sh"
+scp -4 -P $SSH_PORT -i $KEY_PATH $SCRIPT "${SSH_USER}@${SSH_HOST}:~/deploy.sh"
 
 Write-Host "Running deploy on server..." -ForegroundColor Cyan
-ssh -p $SSH_PORT -i $KEY_PATH "${SSH_USER}@${SSH_HOST}" "bash ~/deploy.sh && rm ~/deploy.sh"
+ssh -4 -p $SSH_PORT -i $KEY_PATH "${SSH_USER}@${SSH_HOST}" "bash ~/deploy.sh && rm ~/deploy.sh"
 
 Write-Host "Deploy complete! Verify login per HOSTINGER_DEPLOY.md" -ForegroundColor Green
