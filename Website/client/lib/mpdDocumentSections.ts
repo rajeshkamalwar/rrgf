@@ -1,3 +1,5 @@
+import { createRrgreenV1Seed } from '@/lib/mpdRrgreenSeed';
+
 export interface MpdDocumentSegment {
   id: string;
   label: string;
@@ -51,16 +53,9 @@ export const DEFAULT_DOCUMENT_SECTIONS: MpdDocumentSection[] = [
         id: 'general_academic',
         label: 'General academic',
         sortOrder: 3,
-        keywords: ['fee', 'calendar', 'result', 'academic'],
+        keywords: ['fee', 'calendar', 'result', 'academic', 'smc', 'pta'],
       },
     ],
-  },
-  {
-    id: 'infrastructure',
-    letter: 'E',
-    title: 'School Infrastructure',
-    sortOrder: 3,
-    segments: [],
   },
 ];
 
@@ -437,20 +432,53 @@ function migrateSectionARowToFields(
 
 function staffObjectToFields(staff: Record<string, unknown> | undefined): MpdSectionField[] {
   const s = staff ?? {};
-  const defs: { id: string; label: string }[] = [
-    { id: 'pgt', label: 'PGT' },
-    { id: 'tgt', label: 'TGT' },
-    { id: 'prt', label: 'PRT' },
-    { id: 'teacherSectionRatio', label: 'Teachers Section Ratio' },
-    { id: 'specialEducator', label: 'Special Educator' },
-    { id: 'counsellor', label: 'Counsellor / Wellness Teacher' },
-  ];
-  return defs.map((d) => ({
-    id: d.id,
-    label: d.label,
-    value: String(s[d.id] ?? (d.id === 'teacherSectionRatio' ? '1:1.5' : '0')),
-    type: d.id === 'teacherSectionRatio' ? 'text' : 'number',
-  }));
+  const out: MpdSectionField[] = [];
+  const principal = String(s.principal ?? '').trim();
+  if (principal) {
+    out.push({ id: 'principal', label: 'Principal', value: principal, type: 'text' });
+  }
+  out.push(
+    { id: 'pgt', label: 'a) PGT', value: String(s.pgt ?? 0), type: 'number' },
+    { id: 'tgt', label: 'b) TGT', value: String(s.tgt ?? 0), type: 'number' },
+    { id: 'prt', label: 'c) PRT', value: String(s.prt ?? 0), type: 'number' },
+    {
+      id: 'teacherSectionRatio',
+      label: 'Teachers Section Ratio',
+      value: String(s.teacherSectionRatio ?? '1:1.5'),
+      type: 'text',
+    },
+    {
+      id: 'specialEducator',
+      label: 'Special Educator',
+      value: String(s.specialEducator ?? 0),
+      type: 'number',
+    },
+  );
+  const specDet = String(s.specialEducatorDetails ?? '').trim();
+  if (specDet) {
+    out.push({
+      id: 'special_educator_details',
+      label: 'Special Educator (details)',
+      value: specDet,
+      type: 'text',
+    });
+  }
+  out.push({
+    id: 'counsellor',
+    label: 'Counsellor / Wellness Teacher',
+    value: String(s.counsellor ?? 0),
+    type: 'number',
+  });
+  const counsDet = String(s.counsellorDetails ?? '').trim();
+  if (counsDet) {
+    out.push({
+      id: 'counsellor_details',
+      label: 'Counsellor / Wellness Teacher (details)',
+      value: counsDet,
+      type: 'text',
+    });
+  }
+  return out;
 }
 
 function infrastructureToFields(infra: Record<string, unknown> | undefined): {
@@ -498,13 +526,25 @@ function infrastructureToFields(infra: Record<string, unknown> | undefined): {
       value: String(i.boysToilets ?? ''),
       type: 'number',
     },
-    {
+  ];
+  const teachersList = String(i.teachersListUrl ?? '').trim();
+  if (teachersList) {
+    fields.push({
+      id: 'teachers_list',
+      label: 'TEACHERS LIST',
+      value: teachersList,
+      type: 'url',
+    });
+  }
+  const extra = String(i.additionalFacilities ?? '').trim();
+  if (extra) {
+    fields.push({
       id: 'additional_facilities',
       label: 'ADDITIONAL FACILITIES (AS APPLICABLE)',
-      value: String(i.additionalFacilities ?? ''),
+      value: extra,
       type: 'text',
-    },
-  ];
+    });
+  }
   return { fields, youtube: yt, infraDocLink: doc };
 }
 
@@ -584,8 +624,11 @@ export function migratePayloadV1toV2(v1: Record<string, unknown>): MpdPayloadV2 
   const staffSrc =
     v1.staff && typeof v1.staff === 'object' ? (v1.staff as Record<string, unknown>) : {};
 
-  const infraCategory = documentSecs.find((s) => s.id === 'infrastructure');
-  const docListsBeforeResults = documentSecs.filter((s) => s.id !== 'infrastructure');
+  const docLists = documentSecs.filter((s) => s.id !== 'infrastructure');
+  const teacherListUrl =
+    typeof v1.teacherListUrl === 'string'
+      ? v1.teacherListUrl
+      : String(infraSrc.teachersListUrl ?? '');
 
   const sections: MpdSection[] = [];
   let order = 1;
@@ -600,7 +643,7 @@ export function migratePayloadV1toV2(v1: Record<string, unknown>): MpdPayloadV2 
     fields: migrateSectionARowToFields(v1.sectionA),
   });
 
-  for (const ds of docListsBeforeResults) {
+  for (const ds of docLists) {
     sections.push({
       id: ds.id,
       letter: ds.letter,
@@ -613,17 +656,6 @@ export function migratePayloadV1toV2(v1: Record<string, unknown>): MpdPayloadV2 
   }
 
   sections.push({
-    id: 'results',
-    letter: 'C',
-    title: 'Board exam results',
-    sortOrder: order++,
-    type: 'result_table',
-    visible: true,
-    classes: migrateResultsToClasses(v1.results),
-    supportingDocsCategoryId: 'academic',
-  });
-
-  sections.push({
     id: 'staff_teaching',
     letter: 'D',
     title: 'Staff (Teaching)',
@@ -631,7 +663,18 @@ export function migratePayloadV1toV2(v1: Record<string, unknown>): MpdPayloadV2 
     type: 'staff_table',
     visible: true,
     staffFields: staffObjectToFields(staffSrc),
-    teacherListUrl: typeof v1.teacherListUrl === 'string' ? v1.teacherListUrl : '',
+    teacherListUrl,
+  });
+
+  sections.push({
+    id: 'results',
+    letter: '',
+    title: 'Board exam results (Class X & XII)',
+    sortOrder: order++,
+    type: 'result_table',
+    visible: true,
+    classes: migrateResultsToClasses(v1.results),
+    supportingDocsCategoryId: 'academic',
   });
 
   sections.push({
@@ -643,20 +686,8 @@ export function migratePayloadV1toV2(v1: Record<string, unknown>): MpdPayloadV2 
     visible: true,
     infraFields,
     youtubeInspectionUrl: youtube,
-    infraDocLink: infraDocLink || '/documents/infradoc.jpeg',
+    infraDocLink: infraDocLink || '',
   });
-
-  if (infraCategory) {
-    sections.push({
-      id: infraCategory.id,
-      letter: infraCategory.letter,
-      title: infraCategory.title,
-      sortOrder: order++,
-      type: 'document_list',
-      visible: true,
-      segments: infraCategory.segments.map((s) => ({ ...s, keywords: [...s.keywords] })),
-    });
-  }
 
   return {
     schemaVersion: 2,
@@ -671,69 +702,9 @@ function defaultResultClasses(): MpdResultClass[] {
   return migrateResultsToClasses(null);
 }
 
-/** Canonical default V2 payload (matches former V1 defaults). */
+/** Canonical default V2 payload (RR Greenfield CSV, May 2026). */
 export function createDefaultMpdPayloadV2(): MpdPayloadV2 {
-  const v1: Record<string, unknown> = {
-    documentSections: DEFAULT_DOCUMENT_SECTIONS,
-    sectionA: [
-      { sno: '1', information: 'NAME OF THE SCHOOL', details: 'RR GREENFIELD INTERNATIONAL SCHOOL' },
-      {
-        sno: '2',
-        information: 'AFFILIATION NO. (IF APPLICABLE)',
-        details: 'As applicable / update from affiliation letter',
-      },
-      { sno: '3', information: 'SCHOOL CODE (IF APPLICABLE)', details: '21311612021919150645' },
-      {
-        sno: '4',
-        information: 'COMPLETE ADDRESS WITH PIN CODE',
-        details: 'New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar',
-      },
-      { sno: '5', information: 'NAME OF PRINCIPAL', details: 'Rakesh Ranjan' },
-      { sno: '6', information: 'PRINCIPAL QUALIFICATION', details: 'M.A., B.Ed.' },
-      { sno: '7', information: 'SCHOOL EMAIL ID', details: 'rrgreenfieldsch@gmail.com' },
-      { sno: '8', information: 'CONTACT DETAILS (MOBILE)', details: '7903059909, 8210215818' },
-    ],
-    staff: {
-      pgt: 0,
-      tgt: 6,
-      prt: 8,
-      teacherSectionRatio: '1:1.5',
-      specialEducator: 1,
-      counsellor: 1,
-    },
-    teacherListUrl: '',
-    infrastructure: {
-      campusAreaSqMtr: 6070.28,
-      classroomCount: 22,
-      classroomSizeSqMtr: 47,
-      labCount: 6,
-      labSizeSqMtr: 56,
-      internetFacility: true,
-      girlsToilets: 14,
-      boysToilets: 16,
-      youtubeInspectionUrl: '',
-      additionalFacilities:
-        'Library: 112 sq mtr, Sick Room: 33 sq mtr, Sports & Games Room: 119 sq mtr, Arts & Music Room: 32 sq mtr',
-      infrastructureDocLink: '/documents/infradoc.jpeg',
-    },
-    results: {
-      classX: {
-        doesNotOffer: true,
-        remark: 'NA',
-        rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
-      },
-      classXII: {
-        doesNotOffer: true,
-        remark: 'NA',
-        rows: [{ year: '', registered: 0, passed: 0, remarks: 'NA' }],
-      },
-    },
-    legalDisclaimer:
-      'Note: THE SCHOOL NEEDS TO UPLOAD SELF-ATTESTED COPIES OF ABOVE LISTED DOCUMENTS BY CHAIRMAN/MANAGER/SECRETARY AND PRINCIPAL. IN CASE IT IS NOTICED AT LATER STAGE THAT UPLOADED DOCUMENTS ARE NOT GENUINE THEN SCHOOL SHALL BE LIABLE FOR ACTION AS PER NORMS.',
-    complianceDeadline: '2026-05-21',
-    directiveReference: 'CBSE/MPD/AFF./2026 dated 06.05.2026',
-  };
-  return migratePayloadV1toV2(v1);
+  return migratePayloadV1toV2(createRrgreenV1Seed());
 }
 
 function normalizeTableRowGroup(g: unknown, idx: number): MpdTableRowGroup {

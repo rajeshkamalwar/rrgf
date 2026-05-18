@@ -278,7 +278,9 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
                   <tr key={f.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                     <td className="px-6 py-4 text-sm font-medium">{i + 1}</td>
                     <td className="px-6 py-4 text-sm">{f.label}</td>
-                    <td className="px-6 py-4 text-sm font-medium">{f.value || '—'}</td>
+                    <td className="px-6 py-4 text-sm font-medium whitespace-pre-line">
+                      {f.value || '—'}
+                    </td>
                   </tr>
                 ))}
                 <tr className="bg-gray-50">
@@ -332,7 +334,13 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
                     <td className="px-6 py-4 text-sm font-medium">{index + 1}</td>
                     <td className="px-6 py-4 text-sm">{row.label}</td>
                     <td className="px-6 py-4 text-sm font-medium">
-                      {row.type === 'boolean' ? (row.value === 'true' ? 'YES' : 'NO') : row.value || '—'}
+                      {row.type === 'boolean' ? (
+                        row.value === 'true' ? 'YES' : 'NO'
+                      ) : row.type === 'url' && row.value ? (
+                        <DisclosureDocLink variant="green" label="Open file" link={row.value} />
+                      ) : (
+                        row.value || '—'
+                      )}
                     </td>
                   </tr>
                 ))}

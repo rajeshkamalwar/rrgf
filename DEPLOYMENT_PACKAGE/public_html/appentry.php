@@ -18,7 +18,7 @@ header('X-LiteSpeed-Cache-Control: no-cache');
     <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
     <link rel="shortcut icon" type="image/jpeg" href="/favicon.jpg" />
     <link rel="apple-touch-icon" href="/favicon.jpg" />
-    <script type="module" crossorigin src="/assets/index-ChLkBSHd.js"></script>
+    <script type="module" crossorigin src="/assets/index-BMtDiXEp.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-CNjn5CAk.css">
   </head>
 

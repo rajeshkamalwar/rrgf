@@ -203,7 +203,8 @@ const MandatoryDisclosure = () => {
                     <SectionIcon className={`h-6 w-6 ${iconCls}`} aria-hidden />
                   </div>
                   <h2 id={`mpd-${sec.id}`} className="text-3xl font-bold text-school-secondary">
-                    {sec.letter} — {sec.title}
+                    {sec.letter ? `${sec.letter} — ` : ''}
+                    {sec.title}
                   </h2>
                 </div>
                 {sec.id === 'documents' && showMandatoryUploadReminder ? (

@@ -415,13 +415,30 @@ const Backend = () => {
   const loadDocuments = async () => {
     try {
       const sessionId = localStorage.getItem('adminSessionId');
-      const response = await fetch('/api/admin/documents', {
-        headers: sessionId ? { 'x-session-id': sessionId } : {},
-      });
-      const data = await response.json();
-      if (data.success) {
-        setDocuments(data.documents);
+      if (!sessionId) {
+        setIsAuthenticated(false);
+        return;
       }
+      const response = await fetch('/api/admin/documents', {
+        headers: { 'x-session-id': sessionId },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.success) {
+        setDocuments(data.documents);
+        return;
+      }
+      if (response.status === 401) {
+        localStorage.removeItem('adminSessionId');
+        setIsAuthenticated(false);
+        toast.error('Session expired. Please log in again.');
+        return;
+      }
+      const msg =
+        typeof data.error === 'string'
+          ? data.error
+          : `Failed to load documents (HTTP ${response.status})`;
+      console.error('loadDocuments:', response.status, data);
+      toast.error(msg);
     } catch (error) {
       console.error('Error loading documents:', error);
       toast.error('Failed to load documents');
