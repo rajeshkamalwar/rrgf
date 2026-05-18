@@ -6,8 +6,9 @@
 
 // Enable error reporting for development (disable in production)
 error_reporting(E_ALL);
-ini_set('display_errors', 0); // Don't display errors, log them instead
+ini_set('display_errors', 0);
 ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../php_errors.log');
 
 // Set timezone
 date_default_timezone_set('Asia/Kolkata');
@@ -17,6 +18,7 @@ require_once __DIR__ . '/../services/Database.php';
 require_once __DIR__ . '/../utils/Response.php';
 require_once __DIR__ . '/../controllers/PublicController.php';
 require_once __DIR__ . '/../controllers/AdminController.php';
+require_once __DIR__ . '/../controllers/FolderController.php';
 
 // Enable CORS
 Response::enableCORS();
@@ -157,9 +159,8 @@ try {
             $adminController->updateHeroImageOrder();
         }
         // Folder management routes
-        require_once __DIR__ . '/../controllers/FolderController.php';
         $folderController = new FolderController();
-        
+
         if ($path === 'admin/folders' && $method === 'GET') {
             $folderController->getFolders();
         }
@@ -221,7 +222,7 @@ try {
     else {
         Response::error('Route not found', 404);
     }
-} catch (Exception $e) {
-    error_log("API Error: " . $e->getMessage() . " | Trace: " . $e->getTraceAsString());
-    Response::error('Internal server error', 500);
+} catch (\Throwable $e) {
+    error_log("API Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+    Response::error('Server error: ' . $e->getMessage(), 500);
 }
