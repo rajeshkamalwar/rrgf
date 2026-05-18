@@ -8,10 +8,11 @@ import {
   documentHref,
   isMandatoryPortalUploadResolved,
   isYoutubeHttpsInspectionUrlAccepted,
-  normalizeYoutubeHttpsHref,
+  normalizeYoutubeInspectionUrl,
   passPercent,
   yearDisplay,
 } from '@/lib/mpdPublicLinks';
+import { RRGREEN_TEACHER_LIST_URL, RRGREEN_YOUTUBE_INSPECTION_URL } from '@/lib/mpdRrgreenSeed';
 
 export interface MpdDocumentRow {
   id: string;
@@ -261,7 +262,8 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
       const tgt = Number(fields.find((f) => f.id === 'tgt')?.value ?? 0) || 0;
       const prt = Number(fields.find((f) => f.id === 'prt')?.value ?? 0) || 0;
       const totalTeaching = pgt + tgt + prt;
-      const teacherListHref = documentHref(section.teacherListUrl ?? '');
+      const teacherListRaw = section.teacherListUrl?.trim() || RRGREEN_TEACHER_LIST_URL;
+      const teacherListHref = documentHref(teacherListRaw);
       return (
         <Card>
           <div className="overflow-x-auto">
@@ -295,8 +297,8 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
                     {teacherListHref ? (
                       <DisclosureDocLink
                         variant="green"
-                        label="View teacher list upload"
-                        link={section.teacherListUrl ?? ''}
+                        label="Open teacher list"
+                        link={teacherListRaw}
                       />
                     ) : (
                       <span className="inline-flex items-center gap-2 text-amber-800 text-sm font-medium">
@@ -314,9 +316,10 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
     }
     case 'infra_table': {
       const fields = section.infraFields ?? [];
-      const ytRaw = section.youtubeInspectionUrl?.trim() ?? '';
-      const ytHref = ytRaw ? normalizeYoutubeHttpsHref(ytRaw) : '';
-      const ytOk = isYoutubeHttpsInspectionUrlAccepted(section.youtubeInspectionUrl);
+      const ytRaw =
+        section.youtubeInspectionUrl?.trim() || RRGREEN_YOUTUBE_INSPECTION_URL;
+      const ytHref = normalizeYoutubeInspectionUrl(ytRaw);
+      const ytOk = isYoutubeHttpsInspectionUrlAccepted(ytRaw);
       return (
         <Card>
           <div className="overflow-x-auto">
@@ -361,16 +364,6 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
             </table>
           </div>
 
-          {section.infraDocLink ? (
-            <CardContent className="border-t py-6">
-              <h3 className="font-semibold text-school-secondary mb-3">Supporting infrastructure document</h3>
-              <DisclosureDocLink
-                variant="green"
-                label="View infrastructure dossier"
-                link={section.infraDocLink}
-              />
-            </CardContent>
-          ) : null}
         </Card>
       );
     }

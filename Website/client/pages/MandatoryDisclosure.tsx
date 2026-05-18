@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useScrollAnimation } from '@/hooks/use-scroll-animation';
 import {
@@ -11,7 +10,6 @@ import {
   BookOpen,
   ClipboardList,
   Loader2,
-  AlertTriangle,
 } from 'lucide-react';
 import {
   MpdSectionRenderer,
@@ -60,11 +58,9 @@ function sectionHasPublicContent(sec: MpdSection, documents: MpdDocumentRow[]): 
 
 const MandatoryDisclosure = () => {
   const heroAnimation = useScrollAnimation();
-  const introAnimation = useScrollAnimation();
 
   const [documents, setDocuments] = useState<MpdDocumentRow[]>([]);
   const [disclosure, setDisclosure] = useState<MpdPayloadV2 | null>(null);
-  const [mpdUpdatedAt, setMpdUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -78,7 +74,6 @@ const MandatoryDisclosure = () => {
       if (data.success) {
         setDocuments(data.documents || []);
         setDisclosure(normalizeFullMpdPayload(data.disclosure ?? {}));
-        setMpdUpdatedAt(data.mpdUpdatedAt || null);
       } else {
         setDisclosure(DEFAULT_PAYLOAD);
       }
@@ -96,7 +91,7 @@ const MandatoryDisclosure = () => {
     [payload.sections],
   );
 
-  const { showMandatoryUploadReminder, showYoutubeHeroReminder } = useMpdReminderFlags({
+  const { showMandatoryUploadReminder } = useMpdReminderFlags({
     sections: payload.sections,
     documents,
     loading,
@@ -142,42 +137,6 @@ const MandatoryDisclosure = () => {
         <div ref={heroAnimation.elementRef} className="relative container mx-auto px-4 text-center">
           <Badge className="bg-school-accent text-school-secondary mb-4">Appendix‑IX compliant layout</Badge>
           <h1 className="text-4xl lg:text-6xl font-bold mb-6">Mandatory Public Disclosure</h1>
-          <p className="text-xl text-white/95 max-w-4xl mx-auto leading-relaxed">
-            RR Greenfield International School · Madhepura, Bihar — structured per CBSE revised Appendix‑IX &
-            Directorate communication {payload.directiveReference ?? DEFAULT_PAYLOAD.directiveReference}
-          </p>
-          <p className="mt-4 text-sm text-white/90 font-medium">
-            Last updated (MPD disclosure data){' '}
-            {mpdUpdatedAt ? new Date(mpdUpdatedAt).toLocaleString('en-IN') : loading ? '…' : '—'}
-          </p>
-          {showYoutubeHeroReminder ? (
-            <p className="mt-6 inline-flex flex-wrap justify-center gap-2 rounded-md bg-amber-500/95 px-4 py-3 text-school-secondary max-w-2xl mx-auto text-sm shadow">
-              <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
-              <span className="text-left font-medium">
-                YouTube inspection link is missing or was rejected (e.g. invalid “wwwyoutubecom”). Please add a full
-                https URL on Admin → Appendix‑IX Data.
-              </span>
-            </p>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="py-10 bg-muted/40 border-b mandatory-disclosure-intro">
-        <div ref={introAnimation.elementRef} className="container mx-auto px-4">
-          <Card>
-            <CardContent className="p-8 space-y-3">
-              <div className="flex items-start gap-3">
-                <FileText className="h-8 w-8 text-school-primary shrink-0" aria-hidden />
-                <div className="text-school-secondary space-y-2">
-                  <h2 className="text-lg font-semibold">Public access & SARAS checklist</h2>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    Sections below follow the order configured in Admin → Appendix‑IX (schema V2). Downloadable PDFs
-                    open in a new tab with rel=&quot;noopener&quot; for security.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </section>
 
@@ -219,26 +178,17 @@ const MandatoryDisclosure = () => {
           );
         })}
 
-      <section className="py-12 bg-white mandatory-disclaimer">
-        <div className="container mx-auto px-4 max-w-4xl space-y-4">
-          {showMandatoryUploadReminder ? (
+      {showMandatoryUploadReminder ? (
+        <section className="py-12 bg-white mandatory-disclaimer">
+          <div className="container mx-auto px-4 max-w-4xl">
             <p className="text-sm leading-relaxed text-school-secondary/90 whitespace-pre-wrap border border-amber-200 bg-amber-50/70 p-6 rounded-xl">
               {(payload.legalDisclaimer ?? '').trim()
                 ? (payload.legalDisclaimer ?? '').trim()
                 : DEFAULT_PAYLOAD.legalDisclaimer}
             </p>
-          ) : null}
-          <p className="text-xs text-muted-foreground">
-            Developed for compliance with Directorate letter No.&nbsp;
-            <span className="font-mono">CBSE/MPD/AFF./2026</span> (submission window ends{' '}
-            {payload.complianceDeadline || DEFAULT_PAYLOAD.complianceDeadline} — preserve mail evidence to&nbsp;
-            <a className="underline" href="mailto:cbse.aff@nic.in">
-              cbse.aff@nic.in
-            </a>
-            ).
-          </p>
-        </div>
-      </section>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 };

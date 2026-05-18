@@ -44,17 +44,38 @@ export function normalizeYoutubeHttpsHref(raw: string | undefined): string {
   return /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/+/u, '')}`;
 }
 
+/** Host is youtube.com, youtu.be, or a youtube subdomain (m., music., etc.). */
+function isYoutubeHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^www\./i, '');
+  if (h === 'youtu.be' || h === 'youtube.com') return true;
+  return h.endsWith('.youtube.com');
+}
+
+/** Prefer https://www.youtube.com/watch?v=… for links; youtu.be short URLs are normalized. */
+export function normalizeYoutubeInspectionUrl(raw: string | undefined): string {
+  const urlStr = normalizeYoutubeHttpsHref(raw);
+  if (!urlStr || !isYoutubeHttpsInspectionUrlAccepted(urlStr)) return '';
+  try {
+    const u = new URL(urlStr);
+    const host = u.hostname.toLowerCase().replace(/^www\./i, '');
+    if (host === 'youtu.be') {
+      const id = u.pathname.replace(/^\//, '').split('/')[0]?.split('?')[0];
+      if (id) return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+    }
+    return urlStr;
+  } catch {
+    return urlStr;
+  }
+}
+
 /** Validates host for CBSE appendix inspection video URLs (youtube.com / youtu.be). */
 export function isYoutubeHttpsInspectionUrlAccepted(raw: string | undefined): boolean {
   const urlStr = normalizeYoutubeHttpsHref(raw);
   if (!urlStr) return false;
   try {
     const u = new URL(urlStr);
-    let host = u.hostname.toLowerCase();
-    host = host.replace(/^www\./i, '');
-    if (host === 'youtu.be') return true;
-    if (host === 'youtube.com' || host.endsWith('.youtube.com')) return true;
-    return false;
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    return isYoutubeHost(u.hostname);
   } catch {
     return false;
   }

@@ -7,6 +7,9 @@
 
 class MpdDisclosureService
 {
+    private const RRGREEN_TEACHER_LIST_URL =
+        'https://teams.microsoft.com/l/message/19:61637882c7c9415f8d997814ecca0102@thread.v2/1779111399666?context=%7B%22contextType%22%3A%22chat%22%7D';
+
     public static function tableExists($db): bool
     {
         try {
@@ -42,7 +45,7 @@ class MpdDisclosureService
                 'counsellor' => 1,
                 'counsellorDetails' => 'PAWAN KUMAR RAJ — PG IN PSYCHOLOGY, MOB: 8603119206',
             ],
-            'teacherListUrl' => 'https://drive.google.com/file/d/1Fp_vaPgAbnS6Xrw_BH3Ndb-LDdQFzZnd/view?usp=drive_link',
+            'teacherListUrl' => 'https://teams.microsoft.com/l/message/19:61637882c7c9415f8d997814ecca0102@thread.v2/1779111399666?context=%7B%22contextType%22%3A%22chat%22%7D',
             'infrastructure' => [
                 'campusAreaSqMtr' => 6070.28,
                 'classroomCount' => 22,
@@ -52,7 +55,7 @@ class MpdDisclosureService
                 'internetFacility' => true,
                 'girlsToilets' => 14,
                 'boysToilets' => 16,
-                'youtubeInspectionUrl' => 'https://www.youtube.com/watch?v=iVS2A1JErCQ',
+                'youtubeInspectionUrl' => 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV',
                 'teachersListUrl' => 'https://drive.google.com/file/d/1Fp_vaPgAbnS6Xrw_BH3Ndb-LDdQFzZnd/view?usp=drive_link',
                 'infrastructureDocLink' => '',
             ],
@@ -106,9 +109,12 @@ class MpdDisclosureService
         $infraPack = self::infrastructureObjectToInfraTable($infra);
 
         $staff = is_array($v1['staff'] ?? null) ? $v1['staff'] : [];
-        $teacherList = isset($v1['teacherListUrl']) ? (string) $v1['teacherListUrl'] : '';
+        $teacherList = isset($v1['teacherListUrl']) ? trim((string) $v1['teacherListUrl']) : '';
         if ($teacherList === '' && isset($infra['teachersListUrl'])) {
-            $teacherList = (string) $infra['teachersListUrl'];
+            $teacherList = trim((string) $infra['teachersListUrl']);
+        }
+        if ($teacherList === '') {
+            $teacherList = self::RRGREEN_TEACHER_LIST_URL;
         }
 
         $sections = [];
@@ -645,11 +651,10 @@ class MpdDisclosureService
             return '';
         }
         $host = strtolower($u['host']);
-        /** youtu.be (short links) */
+        $host = preg_replace('/^www\./', '', $host);
         if ($host === 'youtu.be') {
             return $s;
         }
-        /** youtube.com including m., www., music., etc. */
         if ($host === 'youtube.com' || (strlen($host) > 11 && substr($host, -11) === '.youtube.com')) {
             return $s;
         }
@@ -779,7 +784,8 @@ class MpdDisclosureService
             $base['segments'] = $wrapped[0]['segments'] ?? [];
         }
         if ($type === 'staff_table') {
-            $base['teacherListUrl'] = (string) ($sec['teacherListUrl'] ?? '');
+            $teacherUrl = trim((string) ($sec['teacherListUrl'] ?? ''));
+            $base['teacherListUrl'] = $teacherUrl !== '' ? $teacherUrl : self::RRGREEN_TEACHER_LIST_URL;
             if (!empty($sec['staffFields']) && is_array($sec['staffFields'])) {
                 $base['staffFields'] = $sec['staffFields'];
             }
@@ -791,7 +797,7 @@ class MpdDisclosureService
             }
         }
         if ($type === 'infra_table') {
-            $base['youtubeInspectionUrl'] = (string) ($sec['youtubeInspectionUrl'] ?? '');
+            $base['youtubeInspectionUrl'] = self::sanitizeYoutubeInspectionUrl($sec['youtubeInspectionUrl'] ?? '');
             $base['infraDocLink'] = (string) ($sec['infraDocLink'] ?? '');
             if (!empty($sec['infraFields']) && is_array($sec['infraFields'])) {
                 $base['infraFields'] = $sec['infraFields'];

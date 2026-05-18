@@ -1,4 +1,8 @@
-import { createRrgreenV1Seed } from '@/lib/mpdRrgreenSeed';
+import {
+  createRrgreenV1Seed,
+  RRGREEN_TEACHER_LIST_URL,
+  RRGREEN_YOUTUBE_INSPECTION_URL,
+} from '@/lib/mpdRrgreenSeed';
 
 export interface MpdDocumentSegment {
   id: string;
@@ -902,7 +906,8 @@ export function normalizeMpdSection(sec: unknown, index: number): MpdSection {
     base.segments = wrapped[0]?.segments ?? [];
   }
   if (base.type === 'staff_table') {
-    base.teacherListUrl = typeof r.teacherListUrl === 'string' ? r.teacherListUrl : '';
+    const teacherUrl = typeof r.teacherListUrl === 'string' ? r.teacherListUrl.trim() : '';
+    base.teacherListUrl = teacherUrl || RRGREEN_TEACHER_LIST_URL;
     if (Array.isArray(r.staffFields)) {
       base.staffFields = r.staffFields.map((f, i) => normalizeSectionField(f, `staff_${i + 1}`));
     }
@@ -917,7 +922,8 @@ export function normalizeMpdSection(sec: unknown, index: number): MpdSection {
     }
   }
   if (base.type === 'infra_table') {
-    base.youtubeInspectionUrl = typeof r.youtubeInspectionUrl === 'string' ? r.youtubeInspectionUrl : '';
+    const yt = typeof r.youtubeInspectionUrl === 'string' ? r.youtubeInspectionUrl.trim() : '';
+    base.youtubeInspectionUrl = yt || RRGREEN_YOUTUBE_INSPECTION_URL;
     base.infraDocLink = typeof r.infraDocLink === 'string' ? r.infraDocLink : '';
     if (Array.isArray(r.infraFields)) {
       base.infraFields = r.infraFields.map((f, i) => normalizeSectionField(f, `infra_${i + 1}`));

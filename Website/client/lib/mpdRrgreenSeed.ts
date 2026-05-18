@@ -3,6 +3,14 @@
  * Used for defaults and one-shot DB seed scripts.
  */
 
+/** Official school infrastructure inspection video (Section E). */
+export const RRGREEN_YOUTUBE_INSPECTION_URL =
+  'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV';
+
+/** Teacher list link (Section D — staff table). */
+export const RRGREEN_TEACHER_LIST_URL =
+  'https://teams.microsoft.com/l/message/19:61637882c7c9415f8d997814ecca0102@thread.v2/1779111399666?context=%7B%22contextType%22%3A%22chat%22%7D';
+
 export const RRGREEN_DOCUMENT_ROWS: Array<{
   category: 'documents' | 'academic';
   sno: string;
@@ -182,8 +190,7 @@ export function createRrgreenV1Seed(): Record<string, unknown> {
       counsellor: 1,
       counsellorDetails: 'PAWAN KUMAR RAJ — PG IN PSYCHOLOGY, MOB: 8603119206',
     },
-    teacherListUrl:
-      'https://drive.google.com/file/d/1Fp_vaPgAbnS6Xrw_BH3Ndb-LDdQFzZnd/view?usp=drive_link',
+    teacherListUrl: RRGREEN_TEACHER_LIST_URL,
     infrastructure: {
       campusAreaSqMtr: 6070.28,
       classroomCount: 22,
@@ -193,8 +200,7 @@ export function createRrgreenV1Seed(): Record<string, unknown> {
       internetFacility: true,
       girlsToilets: 14,
       boysToilets: 16,
-      youtubeInspectionUrl:
-        'https://www.youtube.com/watch?v=iVS2A1JErCQ',
+      youtubeInspectionUrl: RRGREEN_YOUTUBE_INSPECTION_URL,
       teachersListUrl:
         'https://drive.google.com/file/d/1Fp_vaPgAbnS6Xrw_BH3Ndb-LDdQFzZnd/view?usp=drive_link',
       infrastructureDocLink: '',
