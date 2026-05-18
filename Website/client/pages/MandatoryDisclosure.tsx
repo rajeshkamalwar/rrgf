@@ -13,10 +13,17 @@ import {
   Loader2,
   AlertTriangle,
 } from 'lucide-react';
+import {
+  groupDocsBySegment,
+  normalizeDocumentSections,
+  sortDisclosureDocs,
+  type MpdDocumentSection,
+} from '@/lib/mpdDocumentSections';
 
 interface DocumentRow {
   id: string;
-  category: 'documents' | 'academic' | 'infrastructure';
+  category: string;
+  segment_id?: string | null;
   sno: string;
   document?: string;
   information?: string;
@@ -78,6 +85,7 @@ interface Disclosure {
   legalDisclaimer: string;
   complianceDeadline?: string;
   directiveReference?: string;
+  documentSections?: MpdDocumentSection[];
 }
 
 function passPercent(reg: number, pas: number): string {
@@ -282,11 +290,34 @@ const MandatoryDisclosure = () => {
     }
   };
 
-  const docsB = documents.filter((d) => d.category === 'documents');
-  const docsAcademic = documents.filter((d) => d.category === 'academic');
-  const docsInfra = documents.filter((d) => d.category === 'infrastructure');
-
   const d = disclosure ?? mergeFallbackDisclosure(DEFAULT_DISCLOSURE);
+
+  const docSections = useMemo(
+    () => normalizeDocumentSections(d.documentSections),
+    [d.documentSections],
+  );
+
+  const docSectionsMain = useMemo(
+    () => docSections.filter((s) => s.id !== 'infrastructure'),
+    [docSections],
+  );
+
+  const infraSection = useMemo(
+    () => docSections.find((s) => s.id === 'infrastructure'),
+    [docSections],
+  );
+
+  const docsBySection = useMemo(() => {
+    const map: Record<string, DocumentRow[]> = {};
+    for (const sec of docSections) {
+      map[sec.id] = sortDisclosureDocs(documents.filter((doc) => doc.category === sec.id));
+    }
+    return map;
+  }, [documents, docSections]);
+
+  const docsB = docsBySection.documents ?? [];
+  const docsAcademic = docsBySection.academic ?? [];
+  const docsInfra = docsBySection.infrastructure ?? [];
 
   const totalTeachingStaff = useMemo(() => {
     const s = d.staff;
@@ -329,6 +360,8 @@ const MandatoryDisclosure = () => {
   const classXSupportingDocs = useMemo(
     () =>
       docsAcademic.filter((d) => {
+        if (d.segment_id === 'class_x') return true;
+        if (d.segment_id === 'class_xii') return false;
         const t = (d.information ?? '').toLowerCase();
         return t.includes('class x') && !t.includes('xii');
       }),
@@ -338,6 +371,8 @@ const MandatoryDisclosure = () => {
   const classXIISupportingDocs = useMemo(
     () =>
       docsAcademic.filter((d) => {
+        if (d.segment_id === 'class_xii') return true;
+        if (d.segment_id === 'class_x') return false;
         const t = (d.information ?? '').toLowerCase();
         return (
           /\bclass\s*-?\s*xii\b/.test(t) ||
@@ -346,37 +381,6 @@ const MandatoryDisclosure = () => {
         );
       }),
     [docsAcademic],
-  );
-
-  const pinnedAcademicDocIds = useMemo(() => {
-    const s = new Set<string>();
-    for (const row of classXSupportingDocs) s.add(row.id);
-    for (const row of classXIISupportingDocs) s.add(row.id);
-    return s;
-  }, [classXSupportingDocs, classXIISupportingDocs]);
-
-  // CBSE Section B: only compliance/legal certs — fees, SMC, PTA, calendar go to Section C
-  const DOCS_C_KW = ['fee', 'smc', 'management committee', 'pta', 'parent teacher', 'calendar', 'three-year result', 'board examination', 'annual academic'];
-  const docsBCompliance = useMemo(
-    () => docsB.filter((doc) => {
-      const info = (doc.information ?? '').toLowerCase();
-      return !DOCS_C_KW.some((kw) => info.includes(kw));
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [docsB],
-  );
-  const docsBComplianceIds = useMemo(
-    () => new Set(docsBCompliance.map((doc) => doc.id)),
-    [docsBCompliance],
-  );
-
-  // CBSE Section C: fees / calendar / SMC / PTA + non-class-specific academic docs
-  const docsCMain = useMemo(
-    () => [
-      ...docsB.filter((doc) => !docsBComplianceIds.has(doc.id)),
-      ...docsAcademic.filter((doc) => !pinnedAcademicDocIds.has(doc.id)),
-    ],
-    [docsB, docsBComplianceIds, docsAcademic, pinnedAcademicDocIds],
   );
 
   const ytHref = useMemo(() => {
@@ -391,13 +395,13 @@ const MandatoryDisclosure = () => {
 
   const teacherListHref = useMemo(() => documentHref(d.teacherListUrl), [d.teacherListUrl]);
 
-  /** After data hydrates from /api/mpd — hide nag once Section B compliance docs + teacher list are resolved. */
+  /** After data hydrates from /api/mpd — hide nag once Section B docs + teacher list are resolved. */
   const showMandatoryUploadReminder = useMemo(() => {
     if (loading) return false;
     if (!teacherListHref) return true;
-    if (!docsBCompliance.length) return true;
-    return docsBCompliance.some((row) => !isMandatoryPortalUploadResolved(row));
-  }, [loading, docsBCompliance, teacherListHref]);
+    if (!docsB.length) return true;
+    return docsB.some((row) => !isMandatoryPortalUploadResolved(row));
+  }, [loading, docsB, teacherListHref]);
 
   const showYoutubeHeroReminder = useMemo(
     () => !loading && !ytLooksValid,
@@ -480,6 +484,74 @@ const MandatoryDisclosure = () => {
     }
     return row.details;
   };
+
+  function renderDocumentRows(
+    rows: DocumentRow[],
+    variant: 'accent' | 'green' = 'accent',
+  ) {
+    return rows.map((item, index) => {
+      const show =
+        item.status === '✓ Available' ||
+        item.status === 'Available' ||
+        (item.link && item.link !== '#');
+      const href = documentHref(item.link);
+      return (
+        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+          <td className="px-6 py-4 text-sm font-medium text-school-secondary">{item.sno}</td>
+          <td className="px-6 py-4 text-sm text-school-secondary">
+            {item.information || item.document}
+          </td>
+          <td className="px-6 py-4">
+            {show && href ? (
+              <DisclosureDocLink variant={variant} label="View document" link={item.link} />
+            ) : (
+              <span className="text-sm text-muted-foreground">{item.status}</span>
+            )}
+          </td>
+        </tr>
+      );
+    });
+  }
+
+  function renderSectionDocuments(sec: MpdDocumentSection, variant: 'accent' | 'green') {
+    const sectionDocs = docsBySection[sec.id] ?? [];
+    if (sectionDocs.length === 0) return null;
+    const groups = groupDocsBySegment(sectionDocs, sec);
+    const thead = (
+      <thead className={variant === 'green' ? 'bg-school-green text-white' : 'bg-school-accent text-school-secondary'}>
+        <tr>
+          <th className="px-6 py-4 text-left text-sm font-semibold">S.No</th>
+          <th className="px-6 py-4 text-left text-sm font-semibold">Documents / Particulars</th>
+          <th className="px-6 py-4 text-left text-sm font-semibold">PDF / Record</th>
+        </tr>
+      </thead>
+    );
+    if (groups.length === 1 && !groups[0].segmentId) {
+      return (
+        <table className="w-full">
+          {thead}
+          <tbody className="divide-y divide-gray-200">{renderDocumentRows(groups[0].docs, variant)}</tbody>
+        </table>
+      );
+    }
+    return (
+      <div className="space-y-8">
+        {groups.map((g) => (
+          <div key={g.segmentId || 'all'}>
+            {g.label ? (
+              <h3 className="text-lg font-semibold text-school-secondary mb-3 px-1">{g.label}</h3>
+            ) : null}
+            <table className="w-full">
+              {thead}
+              <tbody className="divide-y divide-gray-200">
+                {renderDocumentRows(g.docs, variant)}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   function renderOutcomeTable(
     title: string,
@@ -629,127 +701,59 @@ const MandatoryDisclosure = () => {
         </div>
       </section>
 
-      {/* B — Documents */}
-      <section className="py-16 bg-white" aria-labelledby="mpd-b">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="bg-school-accent w-12 h-12 rounded-full flex items-center justify-center">
-              <ClipboardList className="h-6 w-6 text-school-secondary" aria-hidden />
-            </div>
-            <h2 id="mpd-b" className="text-3xl font-bold text-school-secondary">
-              B — Documents &amp; Information
-            </h2>
-          </div>
-          {showMandatoryUploadReminder ? (
-            <p className="text-school-secondary/70 mb-6 max-w-4xl">
-              Self-attested copies (per CBSE letter) should be uploaded for each entry. Use the admin panel to attach
-              PDFs.
-            </p>
-          ) : null}
-          <Card>
-            <div className="overflow-x-auto">
-              {loading ? (
-                <div className="p-8 text-center">
-                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-school-primary" />
+      {docSectionsMain.map((sec, secIndex) => {
+        const isAcademic = sec.letter === 'C' || sec.id === 'academic';
+        const variant = isAcademic ? 'green' : 'accent';
+        const bgClass = secIndex % 2 === 0 ? 'bg-white' : 'bg-school-green-light/10';
+        const sectionDocs = docsBySection[sec.id] ?? [];
+        const SectionIcon = isAcademic ? BookOpen : ClipboardList;
+        const iconWrap = isAcademic ? 'bg-school-green' : 'bg-school-accent';
+        const iconCls = isAcademic ? 'text-white' : 'text-school-secondary';
+
+        return (
+          <section
+            key={sec.id}
+            className={`py-16 ${bgClass}`}
+            aria-labelledby={`mpd-${sec.id}`}
+          >
+            <div className="container mx-auto px-4">
+              <div className="flex items-center gap-3 mb-8">
+                <div className={`${iconWrap} w-12 h-12 rounded-full flex items-center justify-center`}>
+                  <SectionIcon className={`h-6 w-6 ${iconCls}`} aria-hidden />
                 </div>
-              ) : (
-                <table className="w-full">
-                  <thead className="bg-school-accent text-school-secondary">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">S.No</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Documents / Particulars</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">PDF / Record</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {docsBCompliance.map((item, index) => {
-                      const show =
-                        item.status === '✓ Available' ||
-                        item.status === 'Available' ||
-                        (item.link && item.link !== '#');
-                      const href = documentHref(item.link);
-                      return (
-                        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="px-6 py-4 text-sm font-medium text-school-secondary">{item.sno}</td>
-                          <td className="px-6 py-4 text-sm text-school-secondary">
-                            {item.information || item.document}
-                          </td>
-                          <td className="px-6 py-4">
-                            {show && href ? (
-                              <DisclosureDocLink variant="accent" label="View document" link={item.link} />
-                            ) : (
-                              <span className="text-sm text-muted-foreground">{item.status}</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </Card>
-        </div>
-      </section>
-
-      {/* C — Result and Academics */}
-      <section className="py-16 bg-school-green-light/10" aria-labelledby="mpd-c">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="bg-school-green w-12 h-12 rounded-full flex items-center justify-center">
-              <BookOpen className="h-6 w-6 text-white" aria-hidden />
-            </div>
-            <h2 id="mpd-c" className="text-3xl font-bold text-school-secondary">
-              C — Result and Academics
-            </h2>
-          </div>
-
-          {docsCMain.length > 0 && (
-            <Card className="mb-8">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-school-green text-white">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">S.No</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">Documents / Particulars</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold">PDF / Record</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {docsCMain.map((item, index) => {
-                      const show =
-                        item.status === '✓ Available' ||
-                        item.status === 'Available' ||
-                        (item.link && item.link !== '#');
-                      const href = documentHref(item.link);
-                      return (
-                        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                          <td className="px-6 py-4 text-sm font-medium text-school-secondary">{item.sno}</td>
-                          <td className="px-6 py-4 text-sm text-school-secondary">
-                            {item.information || item.document}
-                          </td>
-                          <td className="px-6 py-4">
-                            {show && href ? (
-                              <DisclosureDocLink variant="green" label="View document" link={item.link} />
-                            ) : (
-                              <span className="text-sm text-muted-foreground">{item.status}</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <h2 id={`mpd-${sec.id}`} className="text-3xl font-bold text-school-secondary">
+                  {sec.letter} — {sec.title}
+                </h2>
               </div>
-            </Card>
-          )}
-
-          <Card className="p-8 overflow-x-auto">
-            {renderOutcomeTable('RESULT: CLASS X', d.results.classX, classXSupportingDocs)}
-            {renderOutcomeTable('RESULT: CLASS XII', d.results.classXII, classXIISupportingDocs)}
-          </Card>
-        </div>
-      </section>
+              {sec.id === 'documents' && showMandatoryUploadReminder ? (
+                <p className="text-school-secondary/70 mb-6 max-w-4xl">
+                  Self-attested copies (per CBSE letter) should be uploaded for each entry. Use the admin panel to
+                  attach PDFs.
+                </p>
+              ) : null}
+              {sectionDocs.length > 0 ? (
+                <Card className={isAcademic ? 'mb-8' : undefined}>
+                  <div className="overflow-x-auto">
+                    {loading ? (
+                      <div className="p-8 text-center">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-school-primary" />
+                      </div>
+                    ) : (
+                      renderSectionDocuments(sec, variant)
+                    )}
+                  </div>
+                </Card>
+              ) : null}
+              {isAcademic ? (
+                <Card className="p-8 overflow-x-auto">
+                  {renderOutcomeTable('RESULT: CLASS X', d.results.classX, classXSupportingDocs)}
+                  {renderOutcomeTable('RESULT: CLASS XII', d.results.classXII, classXIISupportingDocs)}
+                </Card>
+              ) : null}
+            </div>
+          </section>
+        );
+      })}
 
       {/* D — Staff (Teaching) */}
       <section className="py-16 bg-white" aria-labelledby="mpd-d">
@@ -989,6 +993,7 @@ function normalizeDisclosure(raw: Partial<Disclosure>): Disclosure {
       typeof raw.complianceDeadline === 'string' ? raw.complianceDeadline : base.complianceDeadline,
     directiveReference:
       typeof raw.directiveReference === 'string' ? raw.directiveReference : base.directiveReference,
+    documentSections: normalizeDocumentSections(raw.documentSections),
   };
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -51,6 +51,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Link } from 'react-router-dom';
+import { MpdCategoryManager } from '@/components/MpdCategoryManager';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { Badge } from '@/components/ui/badge';
+import {
+  createDocumentCategory,
+  DEFAULT_DOCUMENT_SECTIONS,
+  normalizeDocumentSections,
+  segmentLabel,
+  suggestSegmentId,
+  type MpdDocumentSection,
+} from '@/lib/mpdDocumentSections';
 
 interface SMTPConfig {
   host: string;
@@ -63,7 +79,8 @@ interface SMTPConfig {
 
 interface Document {
   id: string;
-  category: 'documents' | 'academic' | 'infrastructure';
+  category: string;
+  segment_id?: string | null;
   sno: string;
   document?: string;
   information?: string;
@@ -72,12 +89,6 @@ interface Document {
   sort_order?: number | string;
   hidden_from_public?: number | boolean | string;
 }
-
-const MANDATORY_DOC_SECTIONS: { category: Document['category']; title: string }[] = [
-  { category: 'documents', title: 'B — Documents and Information' },
-  { category: 'academic', title: 'C — Result and Academics' },
-  { category: 'infrastructure', title: 'E — School Infrastructure' },
-];
 
 function sortMandatoryDocs(docs: Document[]): Document[] {
   return [...docs].sort((a, b) => {
@@ -156,6 +167,7 @@ interface MpdPayload {
   legalDisclaimer: string;
   complianceDeadline: string;
   directiveReference: string;
+  documentSections: MpdDocumentSection[];
 }
 
 interface HeroImage {
@@ -224,11 +236,20 @@ const Backend = () => {
   const editingTitleRef = useRef<HTMLInputElement>(null);
   const [showAddDocForm, setShowAddDocForm] = useState(false);
   const [newDoc, setNewDoc] = useState<{
-    category: Document['category'];
+    category: string;
+    segment_id: string;
+    auto_map_segment: boolean;
     information: string;
     sno: string;
     link: string;
-  }>({ category: 'documents', information: '', sno: '', link: '' });
+  }>({
+    category: 'documents',
+    segment_id: '',
+    auto_map_segment: true,
+    information: '',
+    sno: '',
+    link: '',
+  });
   
   // Hero images state
   const [heroImages, setHeroImages] = useState<HeroImage[]>([]);
@@ -265,6 +286,8 @@ const Backend = () => {
   const [mpdUpdatedAt, setMpdUpdatedAt] = useState<string | null>(null);
   const [mpdSaving, setMpdSaving] = useState(false);
   const [uploadingTeacherList, setUploadingTeacherList] = useState(false);
+  const [showQuickNewCategory, setShowQuickNewCategory] = useState(false);
+  const [quickCategory, setQuickCategory] = useState({ letter: 'F', title: '', id: '' });
 
   // Check if already authenticated
   useEffect(() => {
@@ -276,10 +299,28 @@ const Backend = () => {
     }
   }, []);
 
+  const docSections = normalizeDocumentSections(mpdDraft?.documentSections);
+
+  const docCountsByCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const sec of docSections) {
+      counts[sec.id] = documents.filter((d) => d.category === sec.id).length;
+    }
+    return counts;
+  }, [docSections, documents]);
+
+  const setDocumentCategories = (categories: MpdDocumentSection[]) => {
+    setMpdDraft((p) => ({
+      ...(p ?? normalizeMpdPayload({})),
+      documentSections: categories,
+    }));
+  };
+
   // Load documents when authenticated and on documents view
   useEffect(() => {
     if (isAuthenticated && currentView === 'documents') {
       loadDocuments();
+      loadMpdAdminPayload();
     }
   }, [isAuthenticated, currentView]);
 
@@ -529,12 +570,21 @@ const Backend = () => {
           information: newDoc.information.trim(),
           sno: newDoc.sno.trim() || undefined,
           link: newDoc.link.trim() || '#',
+          segment_id: newDoc.segment_id || undefined,
+          auto_map_segment: newDoc.auto_map_segment,
         }),
       });
       const data = await res.json();
       if (data.success && data.document) {
         setDocuments((prev) => [...prev, data.document]);
-        setNewDoc({ category: 'documents', information: '', sno: '', link: '' });
+        setNewDoc({
+          category: docSections[0]?.id ?? 'documents',
+          segment_id: '',
+          auto_map_segment: true,
+          information: '',
+          sno: '',
+          link: '',
+        });
         setShowAddDocForm(false);
         toast.success('Document row created');
       } else {
@@ -595,6 +645,7 @@ const Backend = () => {
         'Note: THE SCHOOL NEEDS TO UPLOAD SELF-ATTESTED COPIES OF ABOVE LISTED DOCUMENTS BY CHAIRMAN/MANAGER/SECRETARY AND PRINCIPAL. IN CASE IT IS NOTICED AT LATER STAGE THAT UPLOADED DOCUMENTS ARE NOT GENUINE THEN SCHOOL SHALL BE LIABLE FOR ACTION AS PER NORMS.',
       complianceDeadline: '2026-05-21',
       directiveReference: 'CBSE/MPD/AFF./2026 dated 06.05.2026',
+      documentSections: DEFAULT_DOCUMENT_SECTIONS,
     };
     const rawR = (incoming.results || {}) as Partial<MpdPayload['results']> &
       Record<'class XII' | 'classXII' | 'classX', MpdClassOutcome | undefined>;
@@ -616,7 +667,96 @@ const Backend = () => {
       legalDisclaimer: incoming.legalDisclaimer || empty.legalDisclaimer,
       complianceDeadline: incoming.complianceDeadline || empty.complianceDeadline,
       directiveReference: incoming.directiveReference || empty.directiveReference,
+      documentSections: normalizeDocumentSections(incoming.documentSections),
     };
+  };
+
+  const saveDocumentSegment = async (docId: string, segmentId: string) => {
+    const sessionId = localStorage.getItem('adminSessionId');
+    if (!sessionId) {
+      toast.error('Session expired');
+      setIsAuthenticated(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/documents/${docId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-session-id': sessionId },
+        body: JSON.stringify({ segment_id: segmentId || null }),
+      });
+      const data = await res.json();
+      if (data.success && data.document) {
+        setDocuments((prev) => prev.map((d) => (d.id === docId ? { ...d, ...data.document } : d)));
+        toast.success('Segment updated');
+      } else {
+        toast.error(data.error || 'Failed to update segment');
+      }
+    } catch {
+      toast.error('Failed to update segment');
+    }
+  };
+
+  const autoMapDocumentSegment = async (doc: Document) => {
+    const suggested = suggestSegmentId(
+      docSections,
+      doc.category,
+      (doc.information ?? doc.document ?? '').trim(),
+    );
+    if (!suggested) {
+      toast.message('No keyword match for this title in section segments');
+      return;
+    }
+    await saveDocumentSegment(doc.id, suggested);
+  };
+
+  const addMpdSectionRow = () => {
+    setMpdDraft((p) => {
+      if (!p) return p;
+      const next = String(p.sectionA.length + 1);
+      return {
+        ...p,
+        sectionA: [
+          ...p.sectionA,
+          { sno: next, information: 'NEW FIELD', details: '' },
+        ],
+      };
+    });
+  };
+
+  const removeMpdSectionRow = (idx: number) => {
+    setMpdDraft((p) => {
+      if (!p || p.sectionA.length <= 1) return p;
+      const next = p.sectionA.filter((_, i) => i !== idx).map((r, i) => ({
+        ...r,
+        sno: String(i + 1),
+      }));
+      return { ...p, sectionA: next };
+    });
+  };
+
+  const saveDocumentCategories = async (categories: MpdDocumentSection[]) => {
+    const draft = { ...(mpdDraft ?? normalizeMpdPayload({})), documentSections: categories };
+    setMpdDraft(draft);
+    await saveMpdAdminPayload(draft);
+  };
+
+  const handleQuickCreateCategory = async () => {
+    const result = createDocumentCategory(docSections, {
+      title: quickCategory.title,
+      letter: quickCategory.letter,
+      id: quickCategory.id || undefined,
+    });
+    if ('error' in result) {
+      toast.error(result.error);
+      return;
+    }
+    const draft = { ...(mpdDraft ?? normalizeMpdPayload({})), documentSections: result.categories };
+    setMpdDraft(draft);
+    setNewDoc((p) => ({ ...p, category: result.newId, segment_id: '' }));
+    setQuickCategory({ letter: 'F', title: '', id: '' });
+    setShowQuickNewCategory(false);
+    await saveMpdAdminPayload(draft);
+    toast.success('Category created');
   };
 
   const loadMpdAdminPayload = async () => {
@@ -638,8 +778,9 @@ const Backend = () => {
     }
   };
 
-  const saveMpdAdminPayload = async () => {
-    if (!mpdDraft) return;
+  const saveMpdAdminPayload = async (disclosureOverride?: MpdPayload) => {
+    const draft = disclosureOverride ?? mpdDraft;
+    if (!draft) return;
     const sessionId = localStorage.getItem('adminSessionId');
     if (!sessionId) {
       toast.error('Session expired');
@@ -653,7 +794,7 @@ const Backend = () => {
           'Content-Type': 'application/json',
           'x-session-id': sessionId,
         },
-        body: JSON.stringify({ disclosure: mpdDraft }),
+        body: JSON.stringify({ disclosure: draft }),
       });
       const data = await response.json();
       if (data.success && data.disclosure) {
@@ -1938,7 +2079,7 @@ const Backend = () => {
                     <ExternalLink className="mr-2 h-4 w-4" /> Preview public URL
                   </Link>
                 </Button>
-                <Button onClick={saveMpdAdminPayload} disabled={mpdSaving}>
+                <Button onClick={() => void saveMpdAdminPayload()} disabled={mpdSaving}>
                   {mpdSaving ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…
@@ -1954,33 +2095,104 @@ const Backend = () => {
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle>Section A — General information</CardTitle>
+              <Button type="button" variant="outline" size="sm" onClick={addMpdSectionRow}>
+                <Plus className="h-4 w-4 mr-1" /> Add row
+              </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {mpdDraft.sectionA.map((row, idx) => (
-                <div key={row.sno} className="grid gap-2 md:grid-cols-3 md:items-center border rounded-lg p-3">
-                  <div className="text-xs text-muted-foreground">{row.information}</div>
-                  <div className="md:col-span-2">
-                    <Input
-                      value={row.details}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setMpdDraft((p) =>
-                          !p
-                            ? p
-                            : {
-                                ...p,
-                                sectionA: p.sectionA.map((r, i) =>
-                                  i === idx ? { ...r, details: v } : r,
-                                ),
-                              },
-                        );
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
+            <CardContent>
+              <Accordion type="multiple" className="w-full space-y-1">
+                {mpdDraft.sectionA.map((row, idx) => (
+                  <AccordionItem
+                    key={`a-${idx}-${row.sno}`}
+                    value={`a-${idx}`}
+                    className="rounded-lg border px-3 border-b"
+                  >
+                    <AccordionTrigger className="hover:no-underline py-3 text-sm">
+                      <div className="flex flex-1 items-center gap-3 text-left min-w-0 pr-2">
+                        <Badge variant="outline" className="shrink-0 font-mono">
+                          {row.sno}
+                        </Badge>
+                        <span className="font-medium truncate">{row.information || 'Untitled field'}</span>
+                        <span className="text-xs text-muted-foreground truncate hidden md:inline max-w-[40%]">
+                          {row.details || '—'}
+                        </span>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4 space-y-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Field label</Label>
+                        <Input
+                          value={row.information}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setMpdDraft((p) =>
+                              !p
+                                ? p
+                                : {
+                                    ...p,
+                                    sectionA: p.sectionA.map((r, i) =>
+                                      i === idx ? { ...r, information: v } : r,
+                                    ),
+                                  },
+                            );
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Details</Label>
+                        <Input
+                          value={row.details}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setMpdDraft((p) =>
+                              !p
+                                ? p
+                                : {
+                                    ...p,
+                                    sectionA: p.sectionA.map((r, i) =>
+                                      i === idx ? { ...r, details: v } : r,
+                                    ),
+                                  },
+                            );
+                          }}
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          disabled={mpdDraft.sectionA.length <= 1}
+                          onClick={() => removeMpdSectionRow(idx)}
+                        >
+                          <TrashIcon className="h-3 w-3 mr-1" /> Remove row
+                        </Button>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Document categories, segments &amp; mapping</CardTitle>
+              <CardDescription>
+                Create categories for mandatory disclosure uploads (B/C/E or custom). Optional segments group rows on
+                the public page. Click <strong>SAVE DATA</strong> above to persist.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <MpdCategoryManager
+                categories={mpdDraft.documentSections}
+                onChange={setDocumentCategories}
+                showSaveButton={false}
+                docCounts={docCountsByCategory}
+              />
             </CardContent>
           </Card>
 
@@ -2290,22 +2502,107 @@ const Backend = () => {
                 <p className="text-sm font-semibold">New Document Row</p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="space-y-1">
-                    <Label>Category</Label>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label>Category</Label>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0 text-xs"
+                        onClick={() => setShowQuickNewCategory((v) => !v)}
+                      >
+                        {showQuickNewCategory ? 'Cancel' : '+ New category'}
+                      </Button>
+                    </div>
                     <Select
                       value={newDoc.category}
                       onValueChange={(v) =>
-                        setNewDoc((p) => ({ ...p, category: v as Document['category'] }))
+                        setNewDoc((p) => ({ ...p, category: v, segment_id: '' }))
                       }
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="documents">B — Documents</SelectItem>
-                        <SelectItem value="academic">C — Academic</SelectItem>
-                        <SelectItem value="infrastructure">E — Infrastructure</SelectItem>
+                        {docSections.map((sec) => (
+                          <SelectItem key={sec.id} value={sec.id}>
+                            {sec.letter} — {sec.title}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  {showQuickNewCategory ? (
+                    <div className="rounded-md border p-3 space-y-2 sm:col-span-2 lg:col-span-4">
+                      <p className="text-xs font-medium">Create category</p>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <Input
+                          placeholder="Letter (e.g. F)"
+                          maxLength={3}
+                          value={quickCategory.letter}
+                          onChange={(e) =>
+                            setQuickCategory((p) => ({ ...p, letter: e.target.value }))
+                          }
+                        />
+                        <Input
+                          className="sm:col-span-2"
+                          placeholder="Title (required)"
+                          value={quickCategory.title}
+                          onChange={(e) =>
+                            setQuickCategory((p) => ({ ...p, title: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <Input
+                        placeholder="Slug ID (optional, auto from title)"
+                        value={quickCategory.id}
+                        onChange={(e) => setQuickCategory((p) => ({ ...p, id: e.target.value }))}
+                      />
+                      <Button type="button" size="sm" onClick={() => void handleQuickCreateCategory()}>
+                        Create category &amp; select
+                      </Button>
+                    </div>
+                  ) : null}
+                  {(() => {
+                    const sec = docSections.find((s) => s.id === newDoc.category);
+                    if (!sec?.segments.length) return null;
+                    return (
+                      <div className="space-y-1">
+                        <Label>Segment (optional)</Label>
+                        <Select
+                          value={newDoc.segment_id || '_none'}
+                          onValueChange={(v) =>
+                            setNewDoc((p) => ({
+                              ...p,
+                              segment_id: v === '_none' ? '' : v,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Auto or pick…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">— Auto from keywords —</SelectItem>
+                            {sec.segments.map((seg) => (
+                              <SelectItem key={seg.id} value={seg.id}>
+                                {seg.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })()}
+                  <div className="flex items-center gap-2 sm:col-span-2">
+                    <Checkbox
+                      id="auto-map-seg"
+                      checked={newDoc.auto_map_segment}
+                      onCheckedChange={(checked) =>
+                        setNewDoc((p) => ({ ...p, auto_map_segment: Boolean(checked) }))
+                      }
+                    />
+                    <Label htmlFor="auto-map-seg" className="text-sm font-normal">
+                      Auto-map segment from title keywords
+                    </Label>
                   </div>
                   <div className="space-y-1 sm:col-span-1 lg:col-span-2">
                     <Label>Title / Information <span className="text-destructive">*</span></Label>
@@ -2339,15 +2636,45 @@ const Backend = () => {
             )}
           </Card>
 
-          {/* ── Per-category tables ── */}
-          {MANDATORY_DOC_SECTIONS.map(({ category, title }) => {
+          <Accordion
+            type="multiple"
+            defaultValue={['__categories__', ...docSections.slice(0, 1).map((s) => s.id)]}
+            className="w-full space-y-2"
+          >
+            <AccordionItem value="__categories__" className="rounded-lg border px-3 border-b">
+              <AccordionTrigger className="hover:no-underline py-3">
+                <div className="flex items-center gap-2 text-left">
+                  <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-semibold">Document categories &amp; segments</span>
+                  <Badge variant="secondary">{docSections.length}</Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="pb-4">
+                <MpdCategoryManager
+                  categories={docSections}
+                  onChange={setDocumentCategories}
+                  onSave={(cats) => saveDocumentCategories(cats)}
+                  saving={mpdSaving}
+                  docCounts={docCountsByCategory}
+                />
+              </AccordionContent>
+            </AccordionItem>
+
+          {docSections.map((sec) => {
+            const category = sec.id;
             const sectionDocs = sortMandatoryDocs(documents.filter((d) => d.category === category));
             return (
-              <Card key={category}>
-                <CardHeader>
-                  <CardTitle className="text-base">{title}</CardTitle>
-                </CardHeader>
-                <CardContent>
+              <AccordionItem key={category} value={category} className="rounded-lg border px-3 border-b">
+                <AccordionTrigger className="hover:no-underline py-3">
+                  <div className="flex flex-1 items-center gap-2 text-left min-w-0 pr-2">
+                    <Badge variant="default" className="shrink-0 font-mono">{sec.letter}</Badge>
+                    <span className="font-semibold truncate">{sec.title}</span>
+                    <Badge variant="secondary" className="shrink-0">
+                      {sectionDocs.length} row{sectionDocs.length === 1 ? '' : 's'}
+                    </Badge>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
                   {sectionDocs.length === 0 && (
                     <p className="text-sm text-muted-foreground">No rows yet. Use "Add Document" above.</p>
                   )}
@@ -2356,7 +2683,8 @@ const Backend = () => {
                       const isEditing = editingTitleId === doc.id;
                       const isExpanded = selectedDocument?.id === doc.id;
                       const hidden = isMandatoryDocHidden(doc);
-                      const titleText = (category === 'documents' ? doc.document || doc.information : doc.information) ?? '';
+                      const titleText = (doc.document || doc.information) ?? '';
+                      const segDef = docSections.find((s) => s.id === category);
 
                       return (
                         <div
@@ -2466,7 +2794,44 @@ const Backend = () => {
                                     {doc.link}
                                   </span>
                                 )}
+                                {segDef && segDef.segments.length > 0 ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    Segment:{' '}
+                                    {segmentLabel(docSections, category, doc.segment_id) || '— unmapped —'}
+                                  </span>
+                                ) : null}
                               </div>
+                              {segDef && segDef.segments.length > 0 ? (
+                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                  <Select
+                                    value={doc.segment_id || '_none'}
+                                    onValueChange={(v) =>
+                                      void saveDocumentSegment(doc.id, v === '_none' ? '' : v)
+                                    }
+                                  >
+                                    <SelectTrigger className="h-8 w-[200px] text-xs">
+                                      <SelectValue placeholder="Segment" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="_none">— None —</SelectItem>
+                                      {segDef.segments.map((seg) => (
+                                        <SelectItem key={seg.id} value={seg.id}>
+                                          {seg.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    onClick={() => void autoMapDocumentSegment(doc)}
+                                  >
+                                    Auto-map
+                                  </Button>
+                                </div>
+                              ) : null}
                             </div>
 
                             {/* Right controls */}
@@ -2557,10 +2922,11 @@ const Backend = () => {
                       );
                     })}
                   </div>
-                </CardContent>
-              </Card>
+                </AccordionContent>
+              </AccordionItem>
             );
           })}
+          </Accordion>
         </div>
       );
     }

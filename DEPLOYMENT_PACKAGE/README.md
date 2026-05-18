@@ -1,5 +1,7 @@
 # RRGF Website - Hostinger Deployment Package
 
+> **Production deploy:** follow **[HOSTINGER_DEPLOY.md](../HOSTINGER_DEPLOY.md)** in the repo root (dual `public_html` paths, `deploy.sh`, verification). This file is supplementary.
+
 This package contains all files needed to deploy the website to Hostinger shared hosting.
 
 ## 📁 Folder Structure
@@ -50,4 +52,4 @@ DEPLOYMENT_PACKAGE/
 - **File Permissions**: Set uploads folder to 755 or 777
 - **.htaccess**: Ensure mod_rewrite is enabled
 
-For detailed instructions, see `DEPLOYMENT_STEPS.md`
+For detailed instructions, see **[HOSTINGER_DEPLOY.md](../HOSTINGER_DEPLOY.md)** (canonical) or `DEPLOYMENT_STEPS.md`

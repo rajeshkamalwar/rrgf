@@ -141,15 +141,25 @@ class AdminController {
         $this->auth->requireAuth();
         $data = Request::jsonBody();
 
-        $category = $data['category'] ?? '';
-        $allowed = ['documents', 'academic', 'infrastructure'];
-        if (!in_array($category, $allowed, true)) {
-            Response::error('Invalid category. Must be documents, academic, or infrastructure.');
+        $mpdPayload = MpdDisclosureService::loadPayload($this->db);
+        $category = MpdDisclosureService::slugifySectionId((string) ($data['category'] ?? ''));
+        if (!MpdDisclosureService::isAllowedCategory($mpdPayload, $category)) {
+            Response::error('Invalid section. Add or select a section in Appendix‑IX → Document sections.');
         }
 
         $information = trim((string)($data['information'] ?? ''));
         if ($information === '') {
             Response::error('information (title) is required');
+        }
+
+        $segmentId = MpdDisclosureService::slugifySectionId((string) ($data['segment_id'] ?? ''));
+        $autoMap = !empty($data['auto_map_segment']);
+        if ($segmentId === '' && $autoMap) {
+            $suggested = MpdDisclosureService::suggestSegmentId($mpdPayload, $category, $information);
+            $segmentId = $suggested !== null ? $suggested : '';
+        }
+        if (!MpdDisclosureService::isValidSegmentForCategory($mpdPayload, $category, $segmentId ?: null)) {
+            Response::error('Invalid segment for this section');
         }
 
         $link   = trim((string)($data['link'] ?? '#'));
@@ -177,9 +187,9 @@ class AdminController {
 
         try {
             $this->db->insert(
-                'INSERT INTO documents (id, category, sno, document, information, link, status, sort_order, hidden_from_public)
-                 VALUES (?, ?, ?, NULL, ?, ?, ?, ?, 0)',
-                [$id, $category, $sno, $information, $link, $status, $sortOrder]
+                'INSERT INTO documents (id, category, segment_id, sno, document, information, link, status, sort_order, hidden_from_public)
+                 VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, 0)',
+                [$id, $category, $segmentId !== '' ? $segmentId : null, $sno, $information, $link, $status, $sortOrder]
             );
             $document = $this->db->fetchOne('SELECT * FROM documents WHERE id = ?', [$id]);
             Response::success(['document' => $document]);
@@ -252,8 +262,35 @@ class AdminController {
             $params[] = $status;
         }
 
+        $mpdPayload = MpdDisclosureService::loadPayload($this->db);
+        if (array_key_exists('category', $data)) {
+            $cat = MpdDisclosureService::slugifySectionId((string) $data['category']);
+            if (!MpdDisclosureService::isAllowedCategory($mpdPayload, $cat)) {
+                Response::error('Invalid section/category');
+            }
+            $fields[] = 'category = ?';
+            $params[] = $cat;
+        }
+        if (array_key_exists('segment_id', $data) || !empty($data['auto_map_segment'])) {
+            $docRow = $this->db->fetchOne('SELECT category, information FROM documents WHERE id = ?', [$documentId]);
+            $catForSeg = MpdDisclosureService::slugifySectionId(
+                (string) ($data['category'] ?? ($docRow['category'] ?? ''))
+            );
+            $titleForSeg = trim((string) ($data['information'] ?? ($docRow['information'] ?? '')));
+            $seg = MpdDisclosureService::slugifySectionId((string) ($data['segment_id'] ?? ''));
+            if ($seg === '' && !empty($data['auto_map_segment'])) {
+                $suggested = MpdDisclosureService::suggestSegmentId($mpdPayload, $catForSeg, $titleForSeg);
+                $seg = $suggested !== null ? $suggested : '';
+            }
+            if (!MpdDisclosureService::isValidSegmentForCategory($mpdPayload, $catForSeg, $seg ?: null)) {
+                Response::error('Invalid segment for this section');
+            }
+            $fields[] = 'segment_id = ?';
+            $params[] = $seg !== '' ? $seg : null;
+        }
+
         if (empty($fields)) {
-            Response::error('Nothing to update — provide information, sno, or link');
+            Response::error('Nothing to update — provide information, sno, link, category, or segment_id');
         }
 
         try {
@@ -344,10 +381,10 @@ class AdminController {
         $this->auth->requireAuth();
         $data = Request::jsonBody();
 
-        $category = $data['category'] ?? '';
-        $allowed = ['documents', 'academic', 'infrastructure'];
-        if (!in_array($category, $allowed, true)) {
-            Response::error('Invalid category');
+        $mpdPayload = MpdDisclosureService::loadPayload($this->db);
+        $category = MpdDisclosureService::slugifySectionId((string) ($data['category'] ?? ''));
+        if (!MpdDisclosureService::isAllowedCategory($mpdPayload, $category)) {
+            Response::error('Invalid section/category');
         }
 
         $ids = $data['ids'] ?? null;

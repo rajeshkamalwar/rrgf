@@ -1,0 +1,22 @@
+---
+description: Hostinger production deploy — dual public_html paths, full php-backend sync, verification
+alwaysApply: true
+---
+
+# Hostinger deployment (RRGF)
+
+**Read and follow [HOSTINGER_DEPLOY.md](../../HOSTINGER_DEPLOY.md)** for every deploy, SSH, or production API/debug task.
+
+## Non-negotiable
+
+1. **Live path:** `~/domains/rrgreenfieldmadhepura.in/public_html/` — the site does not run from `~/public_html/` alone. After changes under `~/public_html/`, rsync to LIVE.
+2. **Full backend:** Deploy entire `DEPLOYMENT_PACKAGE/public_html/php-backend/`, not only `api/index.php`.
+3. **Credentials:** Never commit `database.local.php`. Preserve existing file on server during deploy.
+4. **Verify:** `wc -c` → `php-backend/api/index.php` ≈ 10067; `grep register_shutdown` → 1; `curl` POST `/api/admin/login` → HTTP 200 + `sessionId`.
+
+## Scripts
+
+- Server: `deploy.sh` (repo root)
+- Windows: `deploy.ps1`
+
+Do not invent alternate deploy paths or skip the LIVE domains sync.

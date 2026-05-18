@@ -73,7 +73,194 @@ class MpdDisclosureService
             'complianceDeadline' => '2026-05-21',
             /** Directive date from CBSE communication */
             'directiveReference' => 'CBSE/MPD/AFF./2026 dated 06.05.2026',
+            'documentSections' => self::getDefaultDocumentSections(),
         ];
+    }
+
+    /** Configurable document sections (B/C/E + custom) with optional segments for mapping rows. */
+    public static function getDefaultDocumentSections(): array
+    {
+        return [
+            [
+                'id' => 'documents',
+                'letter' => 'B',
+                'title' => 'Documents and Information',
+                'sortOrder' => 1,
+                'segments' => [
+                    [
+                        'id' => 'compliance',
+                        'label' => 'Compliance & certificates',
+                        'sortOrder' => 1,
+                        'keywords' => ['fire', 'building', 'sanitary', 'trust', 'affidavit', 'recognition', 'noc'],
+                    ],
+                    [
+                        'id' => 'governance',
+                        'label' => 'Governance & committees',
+                        'sortOrder' => 2,
+                        'keywords' => ['smc', 'pta', 'management committee', 'self certification'],
+                    ],
+                ],
+            ],
+            [
+                'id' => 'academic',
+                'letter' => 'C',
+                'title' => 'Result and Academics',
+                'sortOrder' => 2,
+                'segments' => [
+                    [
+                        'id' => 'class_x',
+                        'label' => 'Class X',
+                        'sortOrder' => 1,
+                        'keywords' => ['class x', 'class-x', '10th'],
+                    ],
+                    [
+                        'id' => 'class_xii',
+                        'label' => 'Class XII',
+                        'sortOrder' => 2,
+                        'keywords' => ['class xii', 'class 12', '12th', 'senior secondary'],
+                    ],
+                    [
+                        'id' => 'general_academic',
+                        'label' => 'General academic',
+                        'sortOrder' => 3,
+                        'keywords' => ['fee', 'calendar', 'result', 'academic'],
+                    ],
+                ],
+            ],
+            [
+                'id' => 'infrastructure',
+                'letter' => 'E',
+                'title' => 'School Infrastructure',
+                'sortOrder' => 3,
+                'segments' => [],
+            ],
+        ];
+    }
+
+    public static function normalizeDocumentSections($sections): array
+    {
+        if (!is_array($sections)) {
+            return self::getDefaultDocumentSections();
+        }
+        $out = [];
+        foreach ($sections as $sec) {
+            if (!is_array($sec)) {
+                continue;
+            }
+            $id = self::slugifySectionId((string) ($sec['id'] ?? $sec['title'] ?? ''));
+            if ($id === '') {
+                continue;
+            }
+            $segments = [];
+            if (!empty($sec['segments']) && is_array($sec['segments'])) {
+                foreach ($sec['segments'] as $seg) {
+                    if (!is_array($seg)) {
+                        continue;
+                    }
+                    $segId = self::slugifySectionId((string) ($seg['id'] ?? $seg['label'] ?? ''));
+                    if ($segId === '') {
+                        continue;
+                    }
+                    $kw = [];
+                    if (!empty($seg['keywords']) && is_array($seg['keywords'])) {
+                        foreach ($seg['keywords'] as $k) {
+                            $k = trim((string) $k);
+                            if ($k !== '') {
+                                $kw[] = $k;
+                            }
+                        }
+                    }
+                    $segments[] = [
+                        'id' => $segId,
+                        'label' => trim((string) ($seg['label'] ?? $segId)),
+                        'sortOrder' => (int) ($seg['sortOrder'] ?? count($segments) + 1),
+                        'keywords' => $kw,
+                    ];
+                }
+            }
+            usort($segments, static function ($a, $b) {
+                return ($a['sortOrder'] ?? 0) <=> ($b['sortOrder'] ?? 0);
+            });
+            $out[] = [
+                'id' => $id,
+                'letter' => strtoupper(substr(trim((string) ($sec['letter'] ?? '')), 0, 3)),
+                'title' => trim((string) ($sec['title'] ?? $id)),
+                'sortOrder' => (int) ($sec['sortOrder'] ?? count($out) + 1),
+                'segments' => $segments,
+            ];
+        }
+        if (count($out) === 0) {
+            return self::getDefaultDocumentSections();
+        }
+        usort($out, static function ($a, $b) {
+            return ($a['sortOrder'] ?? 0) <=> ($b['sortOrder'] ?? 0);
+        });
+        return $out;
+    }
+
+    public static function slugifySectionId(string $raw): string
+    {
+        $s = strtolower(trim($raw));
+        $s = preg_replace('/[^a-z0-9]+/', '_', $s);
+        $s = trim($s, '_');
+        return substr($s, 0, 64);
+    }
+
+    /** @return string[] */
+    public static function allowedCategoryIds(array $payload): array
+    {
+        $sections = self::normalizeDocumentSections($payload['documentSections'] ?? []);
+        return array_values(array_map(static function ($s) {
+            return $s['id'];
+        }, $sections));
+    }
+
+    public static function isAllowedCategory(array $payload, string $category): bool
+    {
+        $category = self::slugifySectionId($category);
+        return in_array($category, self::allowedCategoryIds($payload), true);
+    }
+
+    public static function isValidSegmentForCategory(array $payload, string $category, ?string $segmentId): bool
+    {
+        if ($segmentId === null || $segmentId === '') {
+            return true;
+        }
+        $category = self::slugifySectionId($category);
+        $segmentId = self::slugifySectionId($segmentId);
+        foreach (self::normalizeDocumentSections($payload['documentSections'] ?? []) as $sec) {
+            if ($sec['id'] !== $category) {
+                continue;
+            }
+            foreach ($sec['segments'] as $seg) {
+                if ($seg['id'] === $segmentId) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
+    }
+
+    /** Keyword-based segment mapping for new/updated document titles. */
+    public static function suggestSegmentId(array $payload, string $category, string $title): ?string
+    {
+        $category = self::slugifySectionId($category);
+        $sections = self::normalizeDocumentSections($payload['documentSections'] ?? []);
+        $hay = strtolower($title);
+        foreach ($sections as $sec) {
+            if ($sec['id'] !== $category || empty($sec['segments'])) {
+                continue;
+            }
+            foreach ($sec['segments'] as $seg) {
+                foreach ($seg['keywords'] ?? [] as $kw) {
+                    if ($kw !== '' && strpos($hay, strtolower($kw)) !== false) {
+                        return $seg['id'];
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -138,6 +325,10 @@ class MpdDisclosureService
         $defaults = self::getDefaultPayload();
         $merged = array_replace_recursive($defaults, $incoming);
         $merged['infrastructure']['youtubeInspectionUrl'] = self::sanitizeYoutubeInspectionUrl($merged['infrastructure']['youtubeInspectionUrl'] ?? '');
+        $merged['documentSections'] = self::normalizeDocumentSections($merged['documentSections'] ?? []);
+        if (!empty($merged['sectionA']) && is_array($merged['sectionA'])) {
+            $merged['sectionA'] = self::normalizeSectionARows($merged['sectionA']);
+        }
         return $merged;
     }
 
@@ -155,6 +346,10 @@ class MpdDisclosureService
         }
         $merged = array_replace_recursive($current, $incoming);
         $merged['infrastructure']['youtubeInspectionUrl'] = self::sanitizeYoutubeInspectionUrl($merged['infrastructure']['youtubeInspectionUrl'] ?? '');
+        $merged['documentSections'] = self::normalizeDocumentSections($merged['documentSections'] ?? []);
+        if (!empty($merged['sectionA']) && is_array($merged['sectionA'])) {
+            $merged['sectionA'] = self::normalizeSectionARows($merged['sectionA']);
+        }
         $json = json_encode($merged, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         $existing = $db->fetchOne('SELECT id FROM mpd_disclosure WHERE id = 1');
         if ($existing) {
@@ -173,6 +368,28 @@ class MpdDisclosureService
         }
         $decoded = json_decode($row['payload_json'], true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    public static function normalizeSectionARows(array $rows): array
+    {
+        $out = [];
+        $n = 1;
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $info = trim((string) ($row['information'] ?? ''));
+            if ($info === '') {
+                continue;
+            }
+            $out[] = [
+                'sno' => (string) ($row['sno'] ?? $n),
+                'information' => $info,
+                'details' => (string) ($row['details'] ?? ''),
+            ];
+            $n++;
+        }
+        return $out;
     }
 
     public static function updatedAt(Database $db): ?string
