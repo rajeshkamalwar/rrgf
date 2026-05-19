@@ -20,6 +20,9 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+const ACADEMIC_CALENDAR_URL =
+  'https://drive.google.com/file/d/1uzwqM4WR-vXV1u1Rtc4rBrzsBMoBYxMZ/view';
+
 const Academics = () => {
   const academicLevels = [
     {
@@ -354,7 +357,7 @@ const Academics = () => {
               variant="outline" 
               size="lg" 
               className="border-school-accent text-school-accent hover:bg-school-accent hover:text-white text-lg px-8"
-              onClick={() => window.open('/Calander.pdf', '_blank')}
+              onClick={() => window.open(ACADEMIC_CALENDAR_URL, '_blank', 'noopener,noreferrer')}
             >
               <Calendar className="mr-2 h-5 w-5" />
               Download Calendar

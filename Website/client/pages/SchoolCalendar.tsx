@@ -367,7 +367,13 @@ const SchoolCalendar = () => {
             <Button
               size="lg"
               className="bg-school-accent hover:bg-school-accent/90 text-school-secondary text-lg px-8"
-              onClick={() => window.open('/Calander.pdf', '_blank')}
+              onClick={() =>
+                window.open(
+                  'https://drive.google.com/file/d/1uzwqM4WR-vXV1u1Rtc4rBrzsBMoBYxMZ/view',
+                  '_blank',
+                  'noopener,noreferrer',
+                )
+              }
             >
               <Download className="mr-2 h-5 w-5" />
               Download PDF Calendar
