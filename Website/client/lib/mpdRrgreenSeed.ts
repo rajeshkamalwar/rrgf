@@ -171,7 +171,7 @@ export function createRrgreenV1Seed(): Record<string, unknown> {
       {
         sno: '4',
         information: 'COMPLETE ADDRESS WITH PIN CODE',
-        details: 'New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar',
+        details: 'West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar',
       },
       { sno: '5', information: 'NAME OF PRINCIPAL', details: 'Rakesh Ranjan' },
       { sno: '6', information: 'PRINCIPAL QUALIFICATION', details: 'M.A., B.Ed.' },
@@ -182,13 +182,15 @@ export function createRrgreenV1Seed(): Record<string, unknown> {
       principal: 'Rakesh Ranjan',
       pgt: 0,
       tgt: 6,
-      prt: 8,
+      prt: 12,
+      totalTeachers: 21,
       teacherSectionRatio: '1:1.5',
       specialEducator: 1,
       specialEducatorDetails:
         'REENA VISHVAKARMA — D.el.ed (VI), B.ed (special education), MA (social studies) pursuing, CTET qualified, MOB: 6296960455, VI Diploma in visual impairment',
       counsellor: 1,
       counsellorDetails: 'PAWAN KUMAR RAJ — PG IN PSYCHOLOGY, MOB: 8603119206',
+      librarian: 1,
     },
     teacherListUrl: RRGREEN_TEACHER_LIST_URL,
     infrastructure: {

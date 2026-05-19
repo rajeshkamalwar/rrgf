@@ -15,7 +15,8 @@ import {
   Brain,
   TreePine,
   ChevronRight,
-  Calendar
+  Calendar,
+  GraduationCap,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -43,8 +44,43 @@ const Academics = () => {
       description: 'Comprehensive education with introduction to specialized subjects and skill development',
       icon: Brain,
       subjects: ['English', 'Hindi', 'Mathematics', 'Science', 'Social Science', 'Computer Science', 'Sanskrit/Third Language'],
-      highlights: ['Scientific Thinking', 'Critical Analysis', 'Project Work', 'Co-curricular Activities']
-    }
+      highlights: ['Scientific Thinking', 'Critical Analysis', 'Project Work', 'Co-curricular Activities'],
+    },
+    {
+      level: 'Secondary',
+      classes: 'Class IX to X',
+      description:
+        'Structured CBSE secondary programme building conceptual depth and board exam readiness for Class X',
+      icon: Award,
+      subjects: [
+        'English',
+        'Hindi / Sanskrit',
+        'Mathematics',
+        'Science',
+        'Social Science',
+        'Computer Applications',
+        'Work Education / Art Education',
+      ],
+      highlights: ['CBSE Class X Preparation', 'Practical & Lab Work', 'Internal Assessments', 'Life Skills'],
+    },
+    {
+      level: 'Senior Secondary',
+      classes: 'Class XI to XII (+2)',
+      description:
+        'CBSE senior secondary with stream-based learning, board examinations, and career-oriented guidance',
+      icon: GraduationCap,
+      subjects: {
+        'Science Stream': ['Physics', 'Chemistry', 'Mathematics', 'Biology / Computer Science', 'English'],
+        'Commerce Stream': ['Accountancy', 'Business Studies', 'Economics', 'Mathematics / Informatics', 'English'],
+        'Humanities Stream': ['History', 'Political Science', 'Geography', 'Economics / Psychology', 'English'],
+      },
+      highlights: [
+        'CBSE Class XII Board Exams',
+        'Stream Counselling',
+        'Competitive Exam Foundation',
+        'Career & University Guidance',
+      ],
+    },
   ];
 
   const teachingMethodology = [
@@ -90,8 +126,8 @@ const Academics = () => {
             Academic Excellence
           </h1>
           <p className="text-xl lg:text-2xl text-white/90 max-w-4xl mx-auto leading-relaxed">
-            Comprehensive International Standards education from Nursery to Class VIII, fostering intellectual growth, 
-            character development, and preparing students for future success.
+            Comprehensive CBSE education from Nursery to Class XII (senior secondary +2), fostering intellectual
+            growth, character development, and preparing students for future success.
           </p>
         </div>
       </section>
@@ -105,7 +141,7 @@ const Academics = () => {
               Academic Levels
             </h2>
             <p className="text-xl text-school-secondary/70 max-w-3xl mx-auto">
-              Structured learning pathway from early childhood to middle school education.
+              Structured learning pathway from early childhood through senior secondary (+2).
             </p>
           </div>
 

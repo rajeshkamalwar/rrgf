@@ -19,8 +19,8 @@ const Footer = () => {
               </div>
             </div>
             <p className="text-school-secondary-light text-sm leading-relaxed">
-              A renowned International Standard School institution offering comprehensive education from Balvatika to Class 8th,
-              committed to preparing students to be responsible global citizens.
+              A renowned CBSE-affiliated school offering comprehensive education from Balvatika to Class XII
+              (senior secondary +2), committed to preparing students to be responsible global citizens.
             </p>
             <div className="flex space-x-4">
               <a 
@@ -71,7 +71,9 @@ const Footer = () => {
             <ul className="space-y-2">
               <li><Link to="/academics" className="text-school-secondary-light hover:text-white transition-colors">Balvatika</Link></li>
               <li><Link to="/academics/primary" className="text-school-secondary-light hover:text-white transition-colors">Primary School</Link></li>
-              <li><Link to="/academics/middle" className="text-school-secondary-light hover:text-white transition-colors">Middle School</Link></li>
+              <li><Link to="/academics/middle" className="text-school-secondary-light hover:text-white transition-colors">Middle School (VI–VIII)</Link></li>
+              <li><Link to="/academics/secondary" className="text-school-secondary-light hover:text-white transition-colors">Secondary (IX–X)</Link></li>
+              <li><Link to="/academics/senior-secondary" className="text-school-secondary-light hover:text-white transition-colors">Senior Secondary (XI–XII)</Link></li>
             </ul>
           </div>
 
@@ -80,14 +82,14 @@ const Footer = () => {
             <h4 className="text-lg font-semibold">Contact Info</h4>
             <div className="space-y-3">
               <a 
-                href="https://maps.google.com/?q=New+bypass,+Sahugadh+Road,+Ward+No.+2,+Madhepura+-+852113,+Bihar" 
+                href="https://maps.google.com/?q=West+bypass,+Sahugadh+Road,+Ward+No.+2,+Madhepura+-+852113,+Bihar" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-start space-x-3 hover:text-white transition-colors"
               >
                 <MapPin className="h-5 w-5 text-school-accent mt-0.5 flex-shrink-0" />
                 <div className="text-school-secondary-light text-sm hover:text-white transition-colors">
-                  New bypass, Sahugadh Road<br />
+                  West bypass, Sahugadh Road<br />
                   Ward No. 2<br />
                   Madhepura - 852113, Bihar
                 </div>

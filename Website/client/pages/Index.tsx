@@ -192,7 +192,7 @@ const Index = () => {
   ];
 
   const keyHighlights = [
-    { icon: GraduationCap, title: 'International Standards Curriculum', description: 'Comprehensive education from Nursery to Grade 8' },
+    { icon: GraduationCap, title: 'CBSE Curriculum', description: 'Comprehensive education from Nursery to Class XII (+2)' },
     { icon: Users, title: 'Experienced Faculty', description: 'Highly qualified and dedicated teaching staff' },
     { icon: Globe, title: 'International Standards', description: 'World-class infrastructure and teaching methods' },
     { icon: Trophy, title: 'Holistic Development', description: 'Academic excellence with character building' },
@@ -323,7 +323,7 @@ const Index = () => {
                   <span className="text-school-accent block animate-pulse">Leaders</span>
                 </h1>
                 <p className="text-sm sm:text-base md:text-lg lg:text-xl text-white/95 leading-relaxed">
-                  At RR Greenfield International School, we provide comprehensive International Standards education from Nursery to 8th grade,
+                  At RR Greenfield International School, we provide comprehensive CBSE education from Nursery to Class XII (+2),
                   nurturing responsible global citizens with excellence in academics and character development.
                 </p>
               </div>
@@ -335,7 +335,7 @@ const Index = () => {
                   className="bg-school-accent hover:bg-school-accent/90 text-school-secondary text-sm sm:text-base md:text-lg px-5 sm:px-6 md:px-8 py-2.5 sm:py-3 md:py-4 transform hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-xl w-full sm:w-auto"
                 >
                   <Link to="/admissions">
-                    Admissions 2025-26
+                    Admissions 2026-27
                     <ChevronRight className="ml-2 h-4 w-4 md:h-5 md:w-5" />
                   </Link>
                 </Button>
@@ -480,7 +480,7 @@ const Index = () => {
           </h2>
           <p className="text-xl mb-8 text-white/90 max-w-2xl mx-auto">
             Give your child the gift of exceptional education in a nurturing environment. 
-            Admissions are now open for the academic year 2024-25.
+            Admissions are now open for the academic year 2026-27.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -508,13 +508,13 @@ const Index = () => {
               <span>Call: 7903059909 | 8210215818</span>
             </a>
             <a 
-              href="https://maps.google.com/?q=New+bypass,+Sahugadh+Road,+Ward+No.+2,+Madhepura+-+852113,+Bihar" 
+              href="https://maps.google.com/?q=West+bypass,+Sahugadh+Road,+Ward+No.+2,+Madhepura+-+852113,+Bihar" 
               target="_blank" 
               rel="noopener noreferrer"
               className="flex items-center space-x-5 hover:text-school-accent transition-colors"
             >
               <MapPin className="h-5 w-5" />
-              <span>Visit: New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar</span>
+              <span>Visit: West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar</span>
             </a>
           </div>
         </div>

@@ -258,14 +258,12 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
     }
     case 'staff_table': {
       const fields = section.staffFields ?? [];
-      const teachingCountIds = new Set(['pgt', 'tgt', 'prt']);
+      const teachingCountIds = new Set(['pgt', 'tgt', 'prt', 'total_teachers']);
       const pgtField = fields.find((f) => f.id === 'pgt');
       const tgtField = fields.find((f) => f.id === 'tgt');
       const prtField = fields.find((f) => f.id === 'prt');
-      const pgt = Number(pgtField?.value ?? 0) || 0;
-      const tgt = Number(tgtField?.value ?? 0) || 0;
-      const prt = Number(prtField?.value ?? 0) || 0;
-      const totalTeaching = pgt + tgt + prt;
+      const totalField = fields.find((f) => f.id === 'total_teachers');
+      const totalDisplay = totalField?.value?.trim() || '—';
       const mainFields = fields.filter((f) => !teachingCountIds.has(f.id));
       const principalIdx = mainFields.findIndex((f) => f.id === 'principal');
       const totalBlockAt = principalIdx >= 0 ? principalIdx + 1 : 0;
@@ -279,9 +277,9 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
         ...mainFields.slice(totalBlockAt).map((field) => ({ kind: 'field' as const, field })),
       ];
       const teachingSubRows = [
-        { id: 'pgt', label: pgtField?.label ?? 'a) PGT', value: pgt },
-        { id: 'tgt', label: tgtField?.label ?? 'b) TGT', value: tgt },
-        { id: 'prt', label: prtField?.label ?? 'c) PRT', value: prt },
+        { id: 'pgt', label: pgtField?.label ?? 'a) PGT', value: pgtField?.value ?? '0' },
+        { id: 'tgt', label: tgtField?.label ?? 'b) TGT', value: tgtField?.value ?? '0' },
+        { id: 'prt', label: prtField?.label ?? 'c) PRT', value: prtField?.value ?? '0' },
       ];
 
       let serial = 0;
@@ -306,8 +304,8 @@ export function MpdSectionRenderer({ section, documents, loading }: MpdSectionRe
         bodyRows.push(
           <tr key="total_teachers" className={totalStripe}>
             <td className="px-6 py-4 text-sm font-medium">{serial}</td>
-            <td className="px-6 py-4 text-sm font-medium">Total teachers (computed)</td>
-            <td className="px-6 py-4 text-sm font-medium">{totalTeaching}</td>
+            <td className="px-6 py-4 text-sm font-medium">Total teachers</td>
+            <td className="px-6 py-4 text-sm font-medium">{totalDisplay}</td>
           </tr>
         );
         teachingSubRows.forEach((sub) => {

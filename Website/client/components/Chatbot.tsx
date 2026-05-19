@@ -60,12 +60,12 @@ const Chatbot = () => {
       keywords: ["hello", "hi", "hey", "good morning", "good afternoon", "good evening", "start"]
     },
     admissions: {
-      response: "Our admissions for 2025-26 will open soon! We offer admission from Nursery to Class VIII. Required documents include birth certificate, photographs, previous school records, and Aadhar card. The admission process includes application form submission, document verification, and interaction session.",
+      response: "Our admissions for 2026-27 will open soon! We offer admission from Nursery to Class XII. Required documents include birth certificate, photographs, previous school records, and Aadhar card. The admission process includes application form submission, document verification, and interaction session.",
       quickReplies: ["Admission Process", "Required Documents", "Important Dates", "Contact Admissions"],
       keywords: ["admission", "apply", "enrollment", "join", "new student", "application"]
     },
     admissionProcess: {
-      response: "Our admission process has 4 simple steps:\n1. Fill application form\n2. Submit required documents\n3. Parent-child interaction session\n4. Admission confirmation and fee payment\n\nFor 2025-26 admissions, please contact us at 7903059909 or rrgreenfieldsch@gmail.com for details.",
+      response: "Our admission process has 4 simple steps:\n1. Fill application form\n2. Submit required documents\n3. Parent-child interaction session\n4. Admission confirmation and fee payment\n\nFor 2026-27 admissions, please contact us at 7903059909 or rrgreenfieldsch@gmail.com for details.",
       quickReplies: ["Required Documents", "Important Dates", "Fee Information"],
       keywords: ["admission process", "how to apply", "steps", "procedure"]
     },
@@ -75,7 +75,7 @@ const Chatbot = () => {
       keywords: ["documents", "required documents", "papers", "certificates", "what do i need"]
     },
     academics: {
-      response: "We offer International Standards curriculum from Nursery to Class VIII:\n\n• Balvatika (Nursery-UKG): Play-based learning\n• Primary (I-V): Foundation subjects\n• Middle (VI-VIII): Comprehensive education\n\nWe focus on interactive learning, practical application, and holistic development.",
+      response: "We offer CBSE curriculum from Nursery to Class XII:\n\n• Balvatika (Nursery-UKG): Play-based learning\n• Primary (I-V): Foundation subjects\n• Middle (VI-VIII): Comprehensive education\n• Secondary (IX-X): Board preparation\n• Senior Secondary (XI-XII): Science, Commerce & Humanities streams\n\nWe focus on interactive learning, practical application, and holistic development.",
       quickReplies: ["Curriculum Details", "Teaching Methods", "Facilities", "Faculty"],
       keywords: ["academics", "curriculum", "subjects", "classes", "cbse", "studies", "education"]
     },
@@ -85,12 +85,12 @@ const Chatbot = () => {
       keywords: ["facilities", "infrastructure", "library", "lab", "computer", "sports", "playground", "building"]
     },
     contact: {
-        response: "📍 Address: New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar\n\n📞 Phone: 7903059909 | 8210215818\n\n📧 Email: rrgreenfieldsch@gmail.com\n\n🕒 School Hours:\nMonday-Friday: 8:00 AM - 3:00 PM\nSaturday: 8:00 AM - 12:00 PM\nOffice Hours: 9:00 AM - 4:00 PM",
+        response: "📍 Address: West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar\n\n📞 Phone: 7903059909 | 8210215818\n\n📧 Email: rrgreenfieldsch@gmail.com\n\n🕒 School Hours:\nMonday-Friday: 8:00 AM - 3:00 PM\nSaturday: 8:00 AM - 12:00 PM\nOffice Hours: 9:00 AM - 4:00 PM",
       quickReplies: ["Directions", "Office Hours", "Admissions", "Visit Campus"],
       keywords: ["contact", "phone", "email", "address", "location", "reach", "call", "visit"]
     },
     about: {
-      response: "RR Greenfield International School is a premier International Standard School institution in Madhepura, Bihar. We provide quality education from Nursery to Class VIII, focusing on:\n\n✨ Academic excellence\n💪 Character building\n🌟 Leadership development\n🌍 Global citizenship\n❤️ Holistic development\n\nOur mission is to provide affordable, quality education accessible to all families while preparing responsible global citizens.",
+      response: "RR Greenfield International School is a premier International Standard School institution in Madhepura, Bihar. We provide quality education from Nursery to Class XII, focusing on:\n\n✨ Academic excellence\n💪 Character building\n🌟 Leadership development\n🌍 Global citizenship\n❤️ Holistic development\n\nOur mission is to provide affordable, quality education accessible to all families while preparing responsible global citizens.",
       quickReplies: ["Mission & Vision", "Our Values", "Faculty", "Achievements"],
       keywords: ["about", "school", "information", "overview", "mission", "vision", "history"]
     },

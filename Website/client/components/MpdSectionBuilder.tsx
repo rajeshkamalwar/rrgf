@@ -73,6 +73,7 @@ function defaultStaffFields(): MpdSectionField[] {
     { id: 'teacherSectionRatio', label: 'Teachers Section Ratio', value: '1:1.5', type: 'text' },
     { id: 'specialEducator', label: 'Special Educator', value: '0', type: 'number' },
     { id: 'counsellor', label: 'Counsellor / Wellness Teacher', value: '0', type: 'number' },
+    { id: 'librarian', label: 'Librarian', value: '1', type: 'number' },
   ];
 }
 

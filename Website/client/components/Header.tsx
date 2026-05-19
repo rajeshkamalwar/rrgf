@@ -34,8 +34,8 @@ const Header = () => {
               <span>rrgreenfieldsch@gmail.com</span>
             </a>
           </div>
-          <div className="text-school-accent">
-            International Standard School
+          <div className="text-school-accent text-right text-xs whitespace-nowrap">
+            School No - 67201 | Affiliation No - 331348 | Affiliated to CBSE NEW DELHI upto senior secondary (+2 level)
           </div>
         </div>
       </div>

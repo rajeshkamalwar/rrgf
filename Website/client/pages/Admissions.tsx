@@ -64,7 +64,11 @@ const Admissions = () => {
     'Class V',
     'Class VI',
     'Class VII',
-    'Class VIII'
+    'Class VIII',
+    'Class IX',
+    'Class X',
+    'Class XI',
+    'Class XII',
   ];
 
   const handleInputChange = (field: string, value: string) => {
@@ -93,7 +97,7 @@ const Admissions = () => {
         throw new Error(data.error || 'Failed to register interest');
       }
       
-      toast.success('Admission application submitted successfully for session 2025-26! We will contact you within 24-48 hours.');
+      toast.success('Admission application submitted successfully for session 2026-27! We will contact you within 24-48 hours.');
       
       // Reset form
       setFormData({
@@ -169,13 +173,13 @@ const Admissions = () => {
       <section className="relative bg-gradient-to-br from-school-primary via-school-primary-light to-school-green text-white py-20">
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="relative container mx-auto px-4 text-center">
-          <Badge className="bg-school-accent text-school-secondary mb-6">Admissions 2025-26</Badge>
+          <Badge className="bg-school-accent text-school-secondary mb-6">Admissions 2026-27</Badge>
           <h1 className="text-4xl lg:text-6xl font-bold mb-6">
             Join Our School Family
           </h1>
           <p className="text-xl lg:text-2xl text-white/90 max-w-4xl mx-auto leading-relaxed mb-8">
             Begin your child's journey of excellence with RR Greenfield International School.
-            Contact us for admission enquiries for academic year 2025-26.
+            Contact us for admission enquiries for academic year 2026-27.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
@@ -261,11 +265,11 @@ const Admissions = () => {
               </div>
             </div>
 
-            {/* Admission Form 2025-26 */}
+            {/* Admission Form 2026-27 */}
             <div>
               <Badge className="bg-school-accent text-school-secondary mb-4">Admission Form</Badge>
               <h3 className="text-3xl font-bold text-school-secondary mb-2">
-                Admission Application 2025-26
+                Admission Application 2026-27
               </h3>
               <p className="text-school-secondary/70 mb-6">
                 Fill out the form below to apply for admission. All fields are mandatory.
@@ -564,7 +568,7 @@ const Admissions = () => {
                         ) : (
                           <>
                             <Send className="mr-2 h-5 w-5" />
-                            Submit Admission Application 2025-26
+                            Submit Admission Application 2026-27
                           </>
                         )}
                       </Button>
@@ -584,7 +588,7 @@ const Admissions = () => {
           <div className="text-center mb-16">
             <Badge className="bg-school-accent text-school-secondary mb-4">Important Dates</Badge>
             <h2 className="text-4xl font-bold mb-6">
-              Academic Calendar 2025-26
+              Academic Calendar 2026-27
             </h2>
           </div>
 

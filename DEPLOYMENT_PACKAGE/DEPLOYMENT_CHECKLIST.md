@@ -11,7 +11,7 @@
 - [x] .htaccess file (root directory)
 
 ### Recent Updates Included
-- [x] Updated address: "New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar"
+- [x] Updated address: "West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar"
 - [x] Changed "CBSE Affiliated" to "International Standard School"
 - [x] Updated grade range: "Balvatika to Class 8th"
 - [x] Updated teacher count: 27 Teachers

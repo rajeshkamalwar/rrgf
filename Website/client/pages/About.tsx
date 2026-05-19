@@ -103,7 +103,7 @@ const About = () => {
               <div className="space-y-4 text-school-secondary/80 leading-relaxed">
                 <p>
                   RR Greenfield International School stands as a beacon of quality education in Madhepura, Bihar. 
-                  We offer comprehensive International Standards education from Nursery to 8th grade, creating a nurturing and 
+                  We offer comprehensive CBSE education from Nursery to Class XII (senior secondary +2), creating a nurturing and 
                   challenging learning environment for our students.
                 </p>
                 <p>
@@ -130,7 +130,7 @@ const About = () => {
                     <BookOpen className="h-8 w-8 text-white" />
                   </div>
                   <h3 className="font-bold text-school-secondary">International Standards Curriculum</h3>
-                  <p className="text-sm text-school-secondary/70">Nursery to Grade 8</p>
+                  <p className="text-sm text-school-secondary/70">Nursery to Class XII</p>
                 </div>
                 <div className="text-center">
                   <div className="bg-school-accent w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -346,9 +346,22 @@ const About = () => {
                   <h4 className="font-semibold text-school-secondary mb-1">Middle Wing</h4>
                   <p className="text-sm text-school-secondary/70">Class VI - VIII</p>
                 </div>
+                <div className="bg-white p-6 rounded-lg text-center shadow-md">
+                  <div className="bg-school-green w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Award className="h-6 w-6 text-white" />
+                  </div>
+                  <h4 className="font-semibold text-school-secondary mb-1">Secondary</h4>
+                  <p className="text-sm text-school-secondary/70">Class IX - X</p>
+                </div>
+                <div className="bg-white p-6 rounded-lg text-center shadow-md">
+                  <div className="bg-school-primary w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <GraduationCap className="h-6 w-6 text-white" />
+                  </div>
+                  <h4 className="font-semibold text-school-secondary mb-1">Senior Secondary</h4>
+                  <p className="text-sm text-school-secondary/70">Class XI - XII (+2)</p>
+                </div>
               </div>
             </div>
-
           </div>
         </div>
       </section>

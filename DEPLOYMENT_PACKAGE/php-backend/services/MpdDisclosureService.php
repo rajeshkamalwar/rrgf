@@ -7,6 +7,15 @@
 
 class MpdDisclosureService
 {
+    private const RRGREEN_TEACHER_LIST_URL =
+        'https://teams.microsoft.com/l/message/19:61637882c7c9415f8d997814ecca0102@thread.v2/1779111399666?context=%7B%22contextType%22%3A%22chat%22%7D';
+
+    private const SCHOOL_ADDRESS =
+        'West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar';
+
+    private const MPD_YOUTUBE_INSPECTION_LABEL =
+        'LINK OF YOUTUBE VIDEO OF THE INSPECTION OF SCHOOL (INFRASTRUCTURE)';
+
     public static function tableExists($db): bool
     {
         try {
@@ -17,29 +26,34 @@ class MpdDisclosureService
         }
     }
 
-    /** Legacy flat payload (V1) used only to seed migrations / defaults. */
+    /** RR Greenfield CSV seed (rrgreen - Sheet1.csv). */
     private static function getLegacyV1Defaults(): array
     {
         return [
             'sectionA' => [
                 ['sno' => '1', 'information' => 'NAME OF THE SCHOOL', 'details' => 'RR GREENFIELD INTERNATIONAL SCHOOL'],
-                ['sno' => '2', 'information' => 'AFFILIATION NO. (IF APPLICABLE)', 'details' => 'As applicable / update from affiliation letter'],
-                ['sno' => '3', 'information' => 'SCHOOL CODE (IF APPLICABLE)', 'details' => '21311612021919150645'],
-                ['sno' => '4', 'information' => 'COMPLETE ADDRESS WITH PIN CODE', 'details' => 'New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar'],
+                ['sno' => '2', 'information' => 'AFFILIATION NO. (IF APPLICABLE)', 'details' => '331348'],
+                ['sno' => '3', 'information' => 'SCHOOL CODE (IF APPLICABLE)', 'details' => '67201'],
+                ['sno' => '4', 'information' => 'COMPLETE ADDRESS WITH PIN CODE', 'details' => 'West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar'],
                 ['sno' => '5', 'information' => 'NAME OF PRINCIPAL', 'details' => 'Rakesh Ranjan'],
                 ['sno' => '6', 'information' => 'PRINCIPAL QUALIFICATION', 'details' => 'M.A., B.Ed.'],
                 ['sno' => '7', 'information' => 'SCHOOL EMAIL ID', 'details' => 'rrgreenfieldsch@gmail.com'],
-                ['sno' => '8', 'information' => 'CONTACT DETAILS (MOBILE)', 'details' => '7903059909, 8210215818'],
+                ['sno' => '8', 'information' => 'CONTACT DETAILS (MOBILE)', 'details' => '8210215818, 7903059909'],
             ],
             'staff' => [
+                'principal' => 'Rakesh Ranjan',
                 'pgt' => 0,
                 'tgt' => 6,
-                'prt' => 8,
+                'prt' => 12,
+                'totalTeachers' => 21,
                 'teacherSectionRatio' => '1:1.5',
                 'specialEducator' => 1,
+                'specialEducatorDetails' => 'REENA VISHVAKARMA — D.el.ed (VI), B.ed (special education), MA (social studies) pursuing, CTET qualified, MOB: 6296960455, VI Diploma in visual impairment',
                 'counsellor' => 1,
+                'counsellorDetails' => 'PAWAN KUMAR RAJ — PG IN PSYCHOLOGY, MOB: 8603119206',
+                'librarian' => 1,
             ],
-            'teacherListUrl' => '',
+            'teacherListUrl' => 'https://teams.microsoft.com/l/message/19:61637882c7c9415f8d997814ecca0102@thread.v2/1779111399666?context=%7B%22contextType%22%3A%22chat%22%7D',
             'infrastructure' => [
                 'campusAreaSqMtr' => 6070.28,
                 'classroomCount' => 22,
@@ -49,9 +63,9 @@ class MpdDisclosureService
                 'internetFacility' => true,
                 'girlsToilets' => 14,
                 'boysToilets' => 16,
-                'youtubeInspectionUrl' => '',
-                'additionalFacilities' => 'Library: 112 sq mtr, Sick Room: 33 sq mtr, Sports & Games Room: 119 sq mtr, Arts & Music Room: 32 sq mtr',
-                'infrastructureDocLink' => '/documents/infradoc.jpeg',
+                'youtubeInspectionUrl' => 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV',
+                'teachersListUrl' => 'https://drive.google.com/file/d/1Fp_vaPgAbnS6Xrw_BH3Ndb-LDdQFzZnd/view?usp=drive_link',
+                'infrastructureDocLink' => '',
             ],
             'results' => [
                 'classX' => [
@@ -103,7 +117,13 @@ class MpdDisclosureService
         $infraPack = self::infrastructureObjectToInfraTable($infra);
 
         $staff = is_array($v1['staff'] ?? null) ? $v1['staff'] : [];
-        $teacherList = isset($v1['teacherListUrl']) ? (string) $v1['teacherListUrl'] : '';
+        $teacherList = isset($v1['teacherListUrl']) ? trim((string) $v1['teacherListUrl']) : '';
+        if ($teacherList === '' && isset($infra['teachersListUrl'])) {
+            $teacherList = trim((string) $infra['teachersListUrl']);
+        }
+        if ($teacherList === '') {
+            $teacherList = self::RRGREEN_TEACHER_LIST_URL;
+        }
 
         $sections = [];
         $order = 1;
@@ -118,17 +138,10 @@ class MpdDisclosureService
             'fields' => self::sectionAToFields($v1['sectionA'] ?? []),
         ];
 
-        $infraCategory = null;
-        $docBefore = [];
         foreach ($docSecs as $ds) {
             if (($ds['id'] ?? '') === 'infrastructure') {
-                $infraCategory = $ds;
-            } else {
-                $docBefore[] = $ds;
+                continue;
             }
-        }
-
-        foreach ($docBefore as $ds) {
             $sections[] = [
                 'id' => $ds['id'],
                 'letter' => $ds['letter'],
@@ -139,17 +152,6 @@ class MpdDisclosureService
                 'segments' => $ds['segments'],
             ];
         }
-
-        $sections[] = [
-            'id' => 'results',
-            'letter' => 'C',
-            'title' => 'Board exam results',
-            'sortOrder' => $order++,
-            'type' => 'result_table',
-            'visible' => true,
-            'classes' => self::resultsToClasses($v1['results'] ?? []),
-            'supportingDocsCategoryId' => 'academic',
-        ];
 
         $sections[] = [
             'id' => 'staff_teaching',
@@ -163,6 +165,17 @@ class MpdDisclosureService
         ];
 
         $sections[] = [
+            'id' => 'results',
+            'letter' => '',
+            'title' => 'Board exam results (Class X & XII)',
+            'sortOrder' => $order++,
+            'type' => 'result_table',
+            'visible' => true,
+            'classes' => self::resultsToClasses($v1['results'] ?? []),
+            'supportingDocsCategoryId' => 'academic',
+        ];
+
+        $sections[] = [
             'id' => 'infrastructure_numeric',
             'letter' => 'E',
             'title' => 'School Infrastructure (parameters)',
@@ -173,18 +186,6 @@ class MpdDisclosureService
             'youtubeInspectionUrl' => $infraPack['youtube'],
             'infraDocLink' => $infraPack['infraDocLink'],
         ];
-
-        if ($infraCategory !== null) {
-            $sections[] = [
-                'id' => $infraCategory['id'],
-                'letter' => $infraCategory['letter'],
-                'title' => $infraCategory['title'],
-                'sortOrder' => $order++,
-                'type' => 'document_list',
-                'visible' => true,
-                'segments' => $infraCategory['segments'],
-            ];
-        }
 
         return [
             'schemaVersion' => 2,
@@ -214,6 +215,16 @@ class MpdDisclosureService
         return 'text';
     }
 
+    private static function normalizeSchoolAddressValue(string $value): string
+    {
+        $t = trim($value);
+        if ($t === '' || stripos($t, 'new bypass') !== false) {
+            return self::SCHOOL_ADDRESS;
+        }
+
+        return $t;
+    }
+
     /** @return array<int, array<string, mixed>> */
     private static function sectionAToFields($rows): array
     {
@@ -232,11 +243,16 @@ class MpdDisclosureService
             }
             $sno = (string) ($row['sno'] ?? $n);
             $id = self::slugifySectionId($sno) ?: ('row_' . $n);
+            $type = self::inferFieldType($label);
+            $value = (string) ($row['details'] ?? '');
+            if ($type === 'address' || stripos($label, 'ADDRESS') !== false) {
+                $value = self::normalizeSchoolAddressValue($value);
+            }
             $out[] = [
                 'id' => $id,
                 'label' => $label,
-                'value' => (string) ($row['details'] ?? ''),
-                'type' => self::inferFieldType($label),
+                'value' => $value,
+                'type' => $type,
             ];
             $n++;
         }
@@ -247,15 +263,24 @@ class MpdDisclosureService
     /** @return array<int, array<string, mixed>> */
     private static function staffObjectToFields(array $s): array
     {
+        $out = [];
+        $principal = trim((string) ($s['principal'] ?? ''));
+        if ($principal !== '') {
+            $out[] = ['id' => 'principal', 'label' => 'Principal', 'value' => $principal, 'type' => 'text'];
+        }
+        $out[] = [
+            'id' => 'total_teachers',
+            'label' => 'Total teachers',
+            'value' => (string) ($s['totalTeachers'] ?? 21),
+            'type' => 'number',
+        ];
         $defs = [
-            ['id' => 'pgt', 'label' => 'PGT', 'key' => 'pgt'],
-            ['id' => 'tgt', 'label' => 'TGT', 'key' => 'tgt'],
-            ['id' => 'prt', 'label' => 'PRT', 'key' => 'prt'],
+            ['id' => 'pgt', 'label' => 'a) PGT', 'key' => 'pgt'],
+            ['id' => 'tgt', 'label' => 'b) TGT', 'key' => 'tgt'],
+            ['id' => 'prt', 'label' => 'c) PRT', 'key' => 'prt'],
             ['id' => 'teacherSectionRatio', 'label' => 'Teachers Section Ratio', 'key' => 'teacherSectionRatio'],
             ['id' => 'specialEducator', 'label' => 'Special Educator', 'key' => 'specialEducator'],
-            ['id' => 'counsellor', 'label' => 'Counsellor / Wellness Teacher', 'key' => 'counsellor'],
         ];
-        $out = [];
         foreach ($defs as $d) {
             $key = $d['key'];
             $val = $s[$key] ?? ($key === 'teacherSectionRatio' ? '1:1.5' : 0);
@@ -266,6 +291,36 @@ class MpdDisclosureService
                 'type' => $key === 'teacherSectionRatio' ? 'text' : 'number',
             ];
         }
+        $specDet = trim((string) ($s['specialEducatorDetails'] ?? ''));
+        if ($specDet !== '') {
+            $out[] = [
+                'id' => 'special_educator_details',
+                'label' => 'Special Educator (details)',
+                'value' => $specDet,
+                'type' => 'text',
+            ];
+        }
+        $out[] = [
+            'id' => 'counsellor',
+            'label' => 'Counsellor / Wellness Teacher',
+            'value' => (string) ($s['counsellor'] ?? 0),
+            'type' => 'number',
+        ];
+        $counsDet = trim((string) ($s['counsellorDetails'] ?? ''));
+        if ($counsDet !== '') {
+            $out[] = [
+                'id' => 'counsellor_details',
+                'label' => 'Counsellor / Wellness Teacher (details)',
+                'value' => $counsDet,
+                'type' => 'text',
+            ];
+        }
+        $out[] = [
+            'id' => 'librarian',
+            'label' => 'Librarian',
+            'value' => (string) ($s['librarian'] ?? 1),
+            'type' => 'number',
+        ];
 
         return $out;
     }
@@ -315,19 +370,98 @@ class MpdDisclosureService
                 'value' => (string) ($i['boysToilets'] ?? ''),
                 'type' => 'number',
             ],
-            [
+        ];
+        $ytValue = trim($yt) !== '' ? trim($yt) : 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV';
+        $fields[] = [
+            'id' => 'youtube_inspection',
+            'label' => self::MPD_YOUTUBE_INSPECTION_LABEL,
+            'value' => $ytValue,
+            'type' => 'url',
+        ];
+        $teachersList = trim((string) ($i['teachersListUrl'] ?? ''));
+        if ($teachersList !== '') {
+            $fields[] = [
+                'id' => 'teachers_list',
+                'label' => 'TEACHERS LIST',
+                'value' => $teachersList,
+                'type' => 'url',
+            ];
+        }
+        $extra = trim((string) ($i['additionalFacilities'] ?? ''));
+        if ($extra !== '') {
+            $fields[] = [
                 'id' => 'additional_facilities',
                 'label' => 'ADDITIONAL FACILITIES (AS APPLICABLE)',
-                'value' => (string) ($i['additionalFacilities'] ?? ''),
+                'value' => $extra,
                 'type' => 'text',
-            ],
-        ];
+            ];
+        }
 
         return [
-            'fields' => $fields,
-            'youtube' => $yt,
-            'infraDocLink' => $doc !== '' ? $doc : '/documents/infradoc.jpeg',
+            'fields' => self::reorderInfraDisplayFields($fields, $ytValue),
+            'youtube' => $ytValue,
+            'infraDocLink' => $doc,
         ];
+    }
+
+    /**
+     * CSV order: parameters 1–6, YouTube (7), Teachers list (8).
+     *
+     * @param array<int, array<string, mixed>> $fields
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function reorderInfraDisplayFields(array $fields, string $youtubeUrl): array
+    {
+        $coreIds = [
+            'campus_area_sq_mtr',
+            'classrooms',
+            'labs',
+            'internet_facility',
+            'girls_toilets',
+            'boys_toilets',
+        ];
+        $byId = [];
+        foreach ($fields as $f) {
+            if (is_array($f) && isset($f['id'])) {
+                $byId[(string) $f['id']] = $f;
+            }
+        }
+        $out = [];
+        foreach ($coreIds as $id) {
+            if (isset($byId[$id])) {
+                $out[] = $byId[$id];
+            }
+        }
+        $ytValue = trim($youtubeUrl) !== '' ? trim($youtubeUrl) : 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV';
+        $youtube = $byId['youtube_inspection'] ?? [
+            'id' => 'youtube_inspection',
+            'label' => self::MPD_YOUTUBE_INSPECTION_LABEL,
+            'value' => $ytValue,
+            'type' => 'url',
+        ];
+        if (trim((string) ($youtube['value'] ?? '')) === '') {
+            $youtube['value'] = $ytValue;
+        }
+        $tailIds = array_merge($coreIds, ['youtube_inspection', 'teachers_list', 'additional_facilities']);
+        foreach ($fields as $f) {
+            if (!is_array($f) || !isset($f['id'])) {
+                continue;
+            }
+            $id = (string) $f['id'];
+            if (!in_array($id, $tailIds, true)) {
+                $out[] = $f;
+            }
+        }
+        $out[] = $youtube;
+        if (isset($byId['teachers_list'])) {
+            $out[] = $byId['teachers_list'];
+        }
+        if (isset($byId['additional_facilities'])) {
+            $out[] = $byId['additional_facilities'];
+        }
+
+        return $out;
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -419,16 +553,9 @@ class MpdDisclosureService
                         'id' => 'general_academic',
                         'label' => 'General academic',
                         'sortOrder' => 3,
-                        'keywords' => ['fee', 'calendar', 'result', 'academic'],
+                        'keywords' => ['fee', 'calendar', 'result', 'academic', 'smc', 'pta'],
                     ],
                 ],
-            ],
-            [
-                'id' => 'infrastructure',
-                'letter' => 'E',
-                'title' => 'School Infrastructure',
-                'sortOrder' => 3,
-                'segments' => [],
             ],
         ];
     }
@@ -626,11 +753,10 @@ class MpdDisclosureService
             return '';
         }
         $host = strtolower($u['host']);
-        /** youtu.be (short links) */
+        $host = preg_replace('/^www\./', '', $host);
         if ($host === 'youtu.be') {
             return $s;
         }
-        /** youtube.com including m., www., music., etc. */
         if ($host === 'youtube.com' || (strlen($host) > 11 && substr($host, -11) === '.youtube.com')) {
             return $s;
         }
@@ -741,7 +867,21 @@ class MpdDisclosureService
         ];
         if ($type === 'table') {
             if (!empty($sec['fields']) && is_array($sec['fields'])) {
-                $base['fields'] = $sec['fields'];
+                $fields = [];
+                foreach ($sec['fields'] as $f) {
+                    if (!is_array($f)) {
+                        continue;
+                    }
+                    $label = trim((string) ($f['label'] ?? ''));
+                    $fieldType = (string) ($f['type'] ?? 'text');
+                    $value = (string) ($f['value'] ?? '');
+                    if ($fieldType === 'address' || stripos($label, 'ADDRESS') !== false) {
+                        $value = self::normalizeSchoolAddressValue($value);
+                    }
+                    $f['value'] = $value;
+                    $fields[] = $f;
+                }
+                $base['fields'] = $fields;
             }
             if (array_key_exists('tableGroups', $sec) && is_array($sec['tableGroups'])) {
                 $base['tableGroups'] = $sec['tableGroups'];
@@ -760,9 +900,44 @@ class MpdDisclosureService
             $base['segments'] = $wrapped[0]['segments'] ?? [];
         }
         if ($type === 'staff_table') {
-            $base['teacherListUrl'] = (string) ($sec['teacherListUrl'] ?? '');
+            $teacherUrl = trim((string) ($sec['teacherListUrl'] ?? ''));
+            $base['teacherListUrl'] = $teacherUrl !== '' ? $teacherUrl : self::RRGREEN_TEACHER_LIST_URL;
             if (!empty($sec['staffFields']) && is_array($sec['staffFields'])) {
                 $base['staffFields'] = $sec['staffFields'];
+            }
+            $hasLibrarian = false;
+            foreach ($base['staffFields'] ?? [] as $f) {
+                if (is_array($f) && ($f['id'] ?? '') === 'librarian') {
+                    $hasLibrarian = true;
+                    break;
+                }
+            }
+            $staffFields = $base['staffFields'] ?? [];
+            $hasTotal = false;
+            foreach ($staffFields as $f) {
+                if (is_array($f) && ($f['id'] ?? '') === 'total_teachers') {
+                    $hasTotal = true;
+                    break;
+                }
+            }
+            if (!$hasTotal) {
+                array_splice($staffFields, 1, 0, [[
+                    'id' => 'total_teachers',
+                    'label' => 'Total teachers',
+                    'value' => '21',
+                    'type' => 'number',
+                ]]);
+                $base['staffFields'] = $staffFields;
+            }
+            if (!$hasLibrarian) {
+                $base['staffFields'] = array_merge($base['staffFields'] ?? [], [
+                    [
+                        'id' => 'librarian',
+                        'label' => 'Librarian',
+                        'value' => '1',
+                        'type' => 'number',
+                    ],
+                ]);
             }
         }
         if ($type === 'result_table') {
@@ -772,11 +947,14 @@ class MpdDisclosureService
             }
         }
         if ($type === 'infra_table') {
-            $base['youtubeInspectionUrl'] = (string) ($sec['youtubeInspectionUrl'] ?? '');
-            $base['infraDocLink'] = (string) ($sec['infraDocLink'] ?? '');
-            if (!empty($sec['infraFields']) && is_array($sec['infraFields'])) {
-                $base['infraFields'] = $sec['infraFields'];
+            $yt = self::sanitizeYoutubeInspectionUrl($sec['youtubeInspectionUrl'] ?? '');
+            if ($yt === '') {
+                $yt = 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV';
             }
+            $base['youtubeInspectionUrl'] = $yt;
+            $base['infraDocLink'] = (string) ($sec['infraDocLink'] ?? '');
+            $rawFields = !empty($sec['infraFields']) && is_array($sec['infraFields']) ? $sec['infraFields'] : [];
+            $base['infraFields'] = self::reorderInfraDisplayFields($rawFields, $yt);
         }
         if ($type === 'freetext') {
             $base['content'] = (string) ($sec['content'] ?? '');

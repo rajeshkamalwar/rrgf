@@ -78,7 +78,7 @@ const Contact = () => {
       icon: MapPin,
       title: 'Our Location',
       details: [
-        'New bypass, Sahugadh Road',
+        'West bypass, Sahugadh Road',
         'Ward No. 2',
         'Madhepura - 852113, Bihar',
         'India'
@@ -152,7 +152,7 @@ const Contact = () => {
                   className={`hover:shadow-xl transition-shadow border-t-4 border-school-accent ${(isLocation || isPhone || isEmail) ? 'cursor-pointer' : ''}`}
                   onClick={() => {
                     if (isLocation) {
-                      window.open('https://maps.google.com/?q=New+bypass,+Sahugadh+Road,+Ward+No.+2,+Madhepura+-+852113,+Bihar', '_blank');
+                      window.open('https://maps.google.com/?q=West+bypass,+Sahugadh+Road,+Ward+No.+2,+Madhepura+-+852113,+Bihar', '_blank');
                     }
                   }}
                 >
@@ -334,7 +334,7 @@ const Contact = () => {
               <Card className="overflow-hidden">
                 <div className="relative">
                   <iframe
-                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3570.8267845277734!2d87.08052617517!3d26.570088776960!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39ef96c4b5b5b5b5%3A0x1234567890abcdef!2sNew%20bypass%2C%20Sahugadh%20Road%2C%20Ward%20No.%202%2C%20Madhepura%20-%20852113%2C%20Bihar!5e0!3m2!1sen!2sin!4v1234567890123!5m2!1sen!2sin"
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3570.8267845277734!2d87.08052617517!3d26.570088776960!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39ef96c4b5b5b5b5%3A0x1234567890abcdef!2sWest%20bypass%2C%20Sahugadh%20Road%2C%20Ward%20No.%202%2C%20Madhepura%20-%20852113%2C%20Bihar!5e0!3m2!1sen!2sin!4v1234567890123!5m2!1sen!2sin"
                     width="100%"
                     height="300"
                     style={{ border: 0 }}
@@ -389,7 +389,7 @@ const Contact = () => {
                       <strong>From Railway Station:</strong> 2 minutes walk - We're located very close to Madhepura Railway Station
                     </p>
                     <p className="text-sm">
-                      <strong>Location:</strong> New bypass, Sahugadh Road, Ward No. 2
+                      <strong>Location:</strong> West bypass, Sahugadh Road, Ward No. 2
                     </p>
                     <p className="text-sm">
                       <strong>Public Transport:</strong> Auto-rickshaws and buses available
@@ -419,7 +419,7 @@ const Contact = () => {
                   What are the admission requirements?
                 </h4>
                 <p className="text-school-secondary/70 text-sm">
-                  We offer admissions from Nursery to Class VIII. Please contact our admissions office 
+                  We offer admissions from Nursery to Class XII. Please contact our admissions office 
                   for specific requirements for each grade level.
                 </p>
               </CardContent>

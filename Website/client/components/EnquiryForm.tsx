@@ -38,7 +38,11 @@ const EnquiryForm = ({ children }: EnquiryFormProps) => {
     'Class V',
     'Class VI',
     'Class VII',
-    'Class VIII'
+    'Class VIII',
+    'Class IX',
+    'Class X',
+    'Class XI',
+    'Class XII',
   ];
 
   const handleInputChange = (field: string, value: string) => {

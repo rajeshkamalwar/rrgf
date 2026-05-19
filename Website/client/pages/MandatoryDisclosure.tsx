@@ -23,6 +23,7 @@ import {
   type MpdSection,
   type MpdPayloadV2,
 } from '@/lib/mpdDocumentSections';
+import { SCHOOL_ADDRESS } from '@/lib/schoolAddress';
 
 const DEFAULT_PAYLOAD = createDefaultMpdPayloadV2();
 
@@ -103,7 +104,7 @@ const MandatoryDisclosure = () => {
     const findVal = (needle: string) =>
       fields.find((f) => f.label.toUpperCase().includes(needle.toUpperCase()))?.value ?? '';
     const schoolName = findVal('NAME OF THE SCHOOL') || 'RR Greenfield International School';
-    const address = findVal('ADDRESS') || 'Madhepura, Bihar';
+    const address = findVal('ADDRESS') || SCHOOL_ADDRESS;
     const email = findVal('EMAIL') || 'rrgreenfieldsch@gmail.com';
     return JSON.stringify({
       '@context': 'https://schema.org',

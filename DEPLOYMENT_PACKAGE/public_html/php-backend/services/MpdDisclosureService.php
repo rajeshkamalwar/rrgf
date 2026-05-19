@@ -10,6 +10,9 @@ class MpdDisclosureService
     private const RRGREEN_TEACHER_LIST_URL =
         'https://teams.microsoft.com/l/message/19:61637882c7c9415f8d997814ecca0102@thread.v2/1779111399666?context=%7B%22contextType%22%3A%22chat%22%7D';
 
+    private const SCHOOL_ADDRESS =
+        'West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar';
+
     private const MPD_YOUTUBE_INSPECTION_LABEL =
         'LINK OF YOUTUBE VIDEO OF THE INSPECTION OF SCHOOL (INFRASTRUCTURE)';
 
@@ -31,7 +34,7 @@ class MpdDisclosureService
                 ['sno' => '1', 'information' => 'NAME OF THE SCHOOL', 'details' => 'RR GREENFIELD INTERNATIONAL SCHOOL'],
                 ['sno' => '2', 'information' => 'AFFILIATION NO. (IF APPLICABLE)', 'details' => '331348'],
                 ['sno' => '3', 'information' => 'SCHOOL CODE (IF APPLICABLE)', 'details' => '67201'],
-                ['sno' => '4', 'information' => 'COMPLETE ADDRESS WITH PIN CODE', 'details' => 'New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar'],
+                ['sno' => '4', 'information' => 'COMPLETE ADDRESS WITH PIN CODE', 'details' => 'West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar'],
                 ['sno' => '5', 'information' => 'NAME OF PRINCIPAL', 'details' => 'Rakesh Ranjan'],
                 ['sno' => '6', 'information' => 'PRINCIPAL QUALIFICATION', 'details' => 'M.A., B.Ed.'],
                 ['sno' => '7', 'information' => 'SCHOOL EMAIL ID', 'details' => 'rrgreenfieldsch@gmail.com'],
@@ -41,12 +44,14 @@ class MpdDisclosureService
                 'principal' => 'Rakesh Ranjan',
                 'pgt' => 0,
                 'tgt' => 6,
-                'prt' => 8,
+                'prt' => 12,
+                'totalTeachers' => 21,
                 'teacherSectionRatio' => '1:1.5',
                 'specialEducator' => 1,
                 'specialEducatorDetails' => 'REENA VISHVAKARMA — D.el.ed (VI), B.ed (special education), MA (social studies) pursuing, CTET qualified, MOB: 6296960455, VI Diploma in visual impairment',
                 'counsellor' => 1,
                 'counsellorDetails' => 'PAWAN KUMAR RAJ — PG IN PSYCHOLOGY, MOB: 8603119206',
+                'librarian' => 1,
             ],
             'teacherListUrl' => 'https://teams.microsoft.com/l/message/19:61637882c7c9415f8d997814ecca0102@thread.v2/1779111399666?context=%7B%22contextType%22%3A%22chat%22%7D',
             'infrastructure' => [
@@ -210,6 +215,16 @@ class MpdDisclosureService
         return 'text';
     }
 
+    private static function normalizeSchoolAddressValue(string $value): string
+    {
+        $t = trim($value);
+        if ($t === '' || stripos($t, 'new bypass') !== false) {
+            return self::SCHOOL_ADDRESS;
+        }
+
+        return $t;
+    }
+
     /** @return array<int, array<string, mixed>> */
     private static function sectionAToFields($rows): array
     {
@@ -228,11 +243,16 @@ class MpdDisclosureService
             }
             $sno = (string) ($row['sno'] ?? $n);
             $id = self::slugifySectionId($sno) ?: ('row_' . $n);
+            $type = self::inferFieldType($label);
+            $value = (string) ($row['details'] ?? '');
+            if ($type === 'address' || stripos($label, 'ADDRESS') !== false) {
+                $value = self::normalizeSchoolAddressValue($value);
+            }
             $out[] = [
                 'id' => $id,
                 'label' => $label,
-                'value' => (string) ($row['details'] ?? ''),
-                'type' => self::inferFieldType($label),
+                'value' => $value,
+                'type' => $type,
             ];
             $n++;
         }
@@ -248,6 +268,12 @@ class MpdDisclosureService
         if ($principal !== '') {
             $out[] = ['id' => 'principal', 'label' => 'Principal', 'value' => $principal, 'type' => 'text'];
         }
+        $out[] = [
+            'id' => 'total_teachers',
+            'label' => 'Total teachers',
+            'value' => (string) ($s['totalTeachers'] ?? 21),
+            'type' => 'number',
+        ];
         $defs = [
             ['id' => 'pgt', 'label' => 'a) PGT', 'key' => 'pgt'],
             ['id' => 'tgt', 'label' => 'b) TGT', 'key' => 'tgt'],
@@ -289,6 +315,12 @@ class MpdDisclosureService
                 'type' => 'text',
             ];
         }
+        $out[] = [
+            'id' => 'librarian',
+            'label' => 'Librarian',
+            'value' => (string) ($s['librarian'] ?? 1),
+            'type' => 'number',
+        ];
 
         return $out;
     }
@@ -835,7 +867,21 @@ class MpdDisclosureService
         ];
         if ($type === 'table') {
             if (!empty($sec['fields']) && is_array($sec['fields'])) {
-                $base['fields'] = $sec['fields'];
+                $fields = [];
+                foreach ($sec['fields'] as $f) {
+                    if (!is_array($f)) {
+                        continue;
+                    }
+                    $label = trim((string) ($f['label'] ?? ''));
+                    $fieldType = (string) ($f['type'] ?? 'text');
+                    $value = (string) ($f['value'] ?? '');
+                    if ($fieldType === 'address' || stripos($label, 'ADDRESS') !== false) {
+                        $value = self::normalizeSchoolAddressValue($value);
+                    }
+                    $f['value'] = $value;
+                    $fields[] = $f;
+                }
+                $base['fields'] = $fields;
             }
             if (array_key_exists('tableGroups', $sec) && is_array($sec['tableGroups'])) {
                 $base['tableGroups'] = $sec['tableGroups'];
@@ -858,6 +904,40 @@ class MpdDisclosureService
             $base['teacherListUrl'] = $teacherUrl !== '' ? $teacherUrl : self::RRGREEN_TEACHER_LIST_URL;
             if (!empty($sec['staffFields']) && is_array($sec['staffFields'])) {
                 $base['staffFields'] = $sec['staffFields'];
+            }
+            $hasLibrarian = false;
+            foreach ($base['staffFields'] ?? [] as $f) {
+                if (is_array($f) && ($f['id'] ?? '') === 'librarian') {
+                    $hasLibrarian = true;
+                    break;
+                }
+            }
+            $staffFields = $base['staffFields'] ?? [];
+            $hasTotal = false;
+            foreach ($staffFields as $f) {
+                if (is_array($f) && ($f['id'] ?? '') === 'total_teachers') {
+                    $hasTotal = true;
+                    break;
+                }
+            }
+            if (!$hasTotal) {
+                array_splice($staffFields, 1, 0, [[
+                    'id' => 'total_teachers',
+                    'label' => 'Total teachers',
+                    'value' => '21',
+                    'type' => 'number',
+                ]]);
+                $base['staffFields'] = $staffFields;
+            }
+            if (!$hasLibrarian) {
+                $base['staffFields'] = array_merge($base['staffFields'] ?? [], [
+                    [
+                        'id' => 'librarian',
+                        'label' => 'Librarian',
+                        'value' => '1',
+                        'type' => 'number',
+                    ],
+                ]);
             }
         }
         if ($type === 'result_table') {

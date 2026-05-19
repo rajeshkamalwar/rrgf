@@ -31,7 +31,7 @@ const SchoolCalendar = () => {
   const eventsAnimation = useScrollAnimation();
   const holidaysAnimation = useScrollAnimation();
 
-  const academicYear = "2025-26";
+  const academicYear = '2026-27';
 
   const academicEvents = [
     {
@@ -137,14 +137,14 @@ const SchoolCalendar = () => {
   ];
 
   const importantDates = [
-    { title: "Admission Open", date: "January 2025", description: "New admissions for academic year 2025-26" },
-    { title: "Last Date for Admission", date: "March 31, 2025", description: "Final deadline for new student registrations" },
-    { title: "First Day of School", date: "April 1, 2025", description: "Academic year 2025-26 begins" },
-    { title: "Summer Vacation", date: "June 15 - July 15, 2025", description: "One month summer break" },
-    { title: "Winter Vacation", date: "December 20 - January 5, 2026", description: "Two weeks winter break" },
-    { title: "Annual Day", date: "December 15, 2025", description: "Cultural celebration and prize distribution" },
-    { title: "Sports Meet", date: "September 25-30, 2025", description: "Annual inter-house sports competition" },
-    { title: "Last Day of School", date: "March 30, 2026", description: "Academic year 2025-26 ends" }
+    { title: 'Admission Open', date: 'January 2026', description: 'New admissions for academic year 2026-27' },
+    { title: 'Last Date for Admission', date: 'March 31, 2026', description: 'Final deadline for new student registrations' },
+    { title: 'First Day of School', date: 'April 1, 2026', description: 'Academic year 2026-27 begins' },
+    { title: 'Summer Vacation', date: 'June 15 - July 15, 2026', description: 'One month summer break' },
+    { title: 'Winter Vacation', date: 'December 20 - January 5, 2027', description: 'Two weeks winter break' },
+    { title: 'Annual Day', date: 'December 15, 2026', description: 'Cultural celebration and prize distribution' },
+    { title: 'Sports Meet', date: 'September 25-30, 2026', description: 'Annual inter-house sports competition' },
+    { title: 'Last Day of School', date: 'March 30, 2027', description: 'Academic year 2026-27 ends' },
   ];
 
   const holidays = [
@@ -390,7 +390,7 @@ const SchoolCalendar = () => {
       <div className="hidden print:block print:py-8 print:border-b-2 print:border-gray-300 print:mb-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-black mb-2">RR Greenfield International School</h1>
-          <h2 className="text-2xl font-semibold text-black mb-2">Academic Calendar 2025-26</h2>
+          <h2 className="text-2xl font-semibold text-black mb-2">Academic Calendar 2026-27</h2>
           <p className="text-lg text-gray-700">Important dates, events, and holidays for the academic year</p>
         </div>
       </div>

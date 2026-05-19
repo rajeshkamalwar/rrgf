@@ -116,10 +116,10 @@ export const handleAdmissions: RequestHandler = async (req, res) => {
     });
 
     // Email content
-    const emailSubject = `Admission Application 2025-26: ${studentName} - ${classSeeking}`;
+    const emailSubject = `Admission Application 2026-27: ${studentName} - ${classSeeking}`;
     
     const emailBody = `
-      <h2>New Admission Application for Session 2025-26</h2>
+      <h2>New Admission Application for Session 2026-27</h2>
       
       <h3 style="color: #1e40af; margin-top: 20px; margin-bottom: 10px;">Student Information</h3>
       <p><strong>Student Name:</strong> ${studentName}</p>
@@ -147,7 +147,7 @@ export const handleAdmissions: RequestHandler = async (req, res) => {
       
       <hr style="margin-top: 30px; border-color: #e5e7eb;">
       <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
-        This admission application was submitted from the RR Greenfield International School website for the academic session 2025-26.
+        This admission application was submitted from the RR Greenfield International School website for the academic session 2026-27.
       </p>
     `;
 
@@ -164,7 +164,7 @@ export const handleAdmissions: RequestHandler = async (req, res) => {
 
     res.json({ 
       success: true, 
-      message: 'Admission application submitted successfully for session 2025-26',
+      message: 'Admission application submitted successfully for session 2026-27',
       messageId: info.messageId
     });
   } catch (error) {

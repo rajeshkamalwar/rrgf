@@ -3,6 +3,7 @@ import {
   RRGREEN_TEACHER_LIST_URL,
   RRGREEN_YOUTUBE_INSPECTION_URL,
 } from '@/lib/mpdRrgreenSeed';
+import { normalizeSchoolAddressValue } from '@/lib/schoolAddress';
 
 export interface MpdDocumentSegment {
   id: string;
@@ -441,6 +442,12 @@ function staffObjectToFields(staff: Record<string, unknown> | undefined): MpdSec
   if (principal) {
     out.push({ id: 'principal', label: 'Principal', value: principal, type: 'text' });
   }
+  out.push({
+    id: 'total_teachers',
+    label: 'Total teachers',
+    value: String(s.totalTeachers ?? 21),
+    type: 'number',
+  });
   out.push(
     { id: 'pgt', label: 'a) PGT', value: String(s.pgt ?? 0), type: 'number' },
     { id: 'tgt', label: 'b) TGT', value: String(s.tgt ?? 0), type: 'number' },
@@ -482,6 +489,12 @@ function staffObjectToFields(staff: Record<string, unknown> | undefined): MpdSec
       type: 'text',
     });
   }
+  out.push({
+    id: 'librarian',
+    label: 'Librarian',
+    value: String(s.librarian ?? 1),
+    type: 'number',
+  });
   return out;
 }
 
@@ -862,6 +875,9 @@ function normalizeSectionField(f: unknown, fallbackId: string): MpdSectionField 
   if (groupId) {
     base.groupId = groupId;
   }
+  if (base.type === 'address' || /COMPLETE ADDRESS|PIN CODE/i.test(base.label)) {
+    base.value = normalizeSchoolAddressValue(base.value);
+  }
   return base;
 }
 
@@ -965,6 +981,21 @@ export function normalizeMpdSection(sec: unknown, index: number): MpdSection {
     if (Array.isArray(r.staffFields)) {
       base.staffFields = r.staffFields.map((f, i) => normalizeSectionField(f, `staff_${i + 1}`));
     }
+    const staffFields = base.staffFields ?? [];
+    let nextStaff = staffFields;
+    if (!nextStaff.some((f) => f.id === 'total_teachers')) {
+      const principalIdx = nextStaff.findIndex((f) => f.id === 'principal');
+      const insertAt = principalIdx >= 0 ? principalIdx + 1 : 0;
+      nextStaff = [
+        ...nextStaff.slice(0, insertAt),
+        { id: 'total_teachers', label: 'Total teachers', value: '21', type: 'number' },
+        ...nextStaff.slice(insertAt),
+      ];
+    }
+    if (!nextStaff.some((f) => f.id === 'librarian')) {
+      nextStaff = [...nextStaff, { id: 'librarian', label: 'Librarian', value: '1', type: 'number' }];
+    }
+    base.staffFields = nextStaff;
   }
   if (base.type === 'result_table') {
     base.supportingDocsCategoryId =

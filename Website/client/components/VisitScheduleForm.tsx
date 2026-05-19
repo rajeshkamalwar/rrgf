@@ -268,12 +268,12 @@ const VisitScheduleForm = ({ children }: VisitScheduleFormProps) => {
               <div className="text-sm text-school-secondary">
                 <p className="font-medium">Visit Address:</p>
                 <a 
-                  href="https://maps.google.com/?q=New+bypass,+Sahugadh+Road,+Ward+No.+2,+Madhepura+-+852113,+Bihar" 
+                  href="https://maps.google.com/?q=West+bypass,+Sahugadh+Road,+Ward+No.+2,+Madhepura+-+852113,+Bihar" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="text-school-primary hover:text-school-primary-dark underline transition-colors"
                 >
-                  New bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar
+                  West bypass, Sahugadh Road, Ward No. 2, Madhepura - 852113, Bihar
                 </a>
                 <p className="mt-2 text-school-accent font-medium">School Hours: Mon-Fri 8:00 AM - 3:00 PM, Sat 8:00 AM - 12:00 PM</p>
               </div>
