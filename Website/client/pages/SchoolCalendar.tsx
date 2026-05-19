@@ -369,7 +369,7 @@ const SchoolCalendar = () => {
               className="bg-school-accent hover:bg-school-accent/90 text-school-secondary text-lg px-8"
               onClick={() =>
                 window.open(
-                  'https://rrgreenfieldmadhepura.in/documents/Annual%20Academic%20Calendar.pdf',
+                  '/documents/academic-calendar.pdf',
                   '_blank',
                   'noopener,noreferrer',
                 )

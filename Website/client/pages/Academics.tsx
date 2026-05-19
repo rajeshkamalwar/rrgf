@@ -20,8 +20,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const ACADEMIC_CALENDAR_URL =
-  'https://rrgreenfieldmadhepura.in/documents/Annual%20Academic%20Calendar.pdf';
+const ACADEMIC_CALENDAR_URL = '/documents/academic-calendar.pdf';
 
 const Academics = () => {
   const academicLevels = [
