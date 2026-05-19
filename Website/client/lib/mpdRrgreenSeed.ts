@@ -203,8 +203,7 @@ export function createRrgreenV1Seed(): Record<string, unknown> {
       girlsToilets: 14,
       boysToilets: 16,
       youtubeInspectionUrl: RRGREEN_YOUTUBE_INSPECTION_URL,
-      teachersListUrl:
-        'https://drive.google.com/file/d/1Fp_vaPgAbnS6Xrw_BH3Ndb-LDdQFzZnd/view?usp=drive_link',
+      teachersListUrl: '/documents/teachers-list.pdf',
       infrastructureDocLink: '',
     },
     results: {

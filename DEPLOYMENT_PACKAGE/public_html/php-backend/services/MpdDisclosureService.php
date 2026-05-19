@@ -64,7 +64,7 @@ class MpdDisclosureService
                 'girlsToilets' => 14,
                 'boysToilets' => 16,
                 'youtubeInspectionUrl' => 'https://youtu.be/iVS2A1JErCQ?si=_Vq3haCLWnUSJkFV',
-                'teachersListUrl' => 'https://drive.google.com/file/d/1Fp_vaPgAbnS6Xrw_BH3Ndb-LDdQFzZnd/view?usp=drive_link',
+                'teachersListUrl' => '/documents/teachers-list.pdf',
                 'infrastructureDocLink' => '',
             ],
             'results' => [
