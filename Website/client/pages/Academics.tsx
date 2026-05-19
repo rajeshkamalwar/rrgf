@@ -21,7 +21,7 @@ import {
 import { Link } from 'react-router-dom';
 
 const ACADEMIC_CALENDAR_URL =
-  'https://drive.google.com/file/d/1uzwqM4WR-vXV1u1Rtc4rBrzsBMoBYxMZ/view';
+  'https://rrgreenfieldmadhepura.in/documents/Annual%20Academic%20Calendar.pdf';
 
 const Academics = () => {
   const academicLevels = [

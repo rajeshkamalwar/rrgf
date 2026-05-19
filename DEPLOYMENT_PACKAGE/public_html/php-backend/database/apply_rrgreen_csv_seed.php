@@ -15,18 +15,18 @@ MpdDisclosureService::savePayload($db, $payload);
 echo "Saved MPD disclosure payload (schema V2, CSV order).\n";
 
 $rows = [
-    ['documents', '1', 'Affiliation/Upgradation Letter and Recent Extension of Affiliation, if any', '#', 'Not Applicable', null],
-    ['documents', '2', 'Societies/Trust/Company Registration/Renewal Certificate, as applicable', 'https://drive.google.com/file/d/1_U-6Z0SzHIjsdmbgpCOYw6JG78fdbqEN/view?usp=drive_link', '✓ Available', null],
-    ['documents', '3', 'NOC', 'https://drive.google.com/file/d/1Obc3UH55OKpTL4kH5lbSjP7qpg5X-9PH/view?usp=drive_link', '✓ Available', null],
-    ['documents', '4', 'Recognition certificate under RTE Act 2009', 'https://drive.google.com/file/d/1Yoam5ydRykVBdFhWijlDroqwOec3Tymz/view?usp=drive_link', '✓ Available', null],
-    ['documents', '5', 'Building Safety certificate', 'https://drive.google.com/file/d/1U6yscxWK7zWvXYKYR3g3lYtzHBp_dCxO/view?usp=drive_link', '✓ Available', null],
-    ['documents', '6', 'Fire certificate', 'https://drive.google.com/file/d/1M3vYQvGBpwrgNfLs0Uw5h1qYBRR8lES0/view?usp=drive_link', '✓ Available', null],
-    ['documents', '7', 'Self Certification', 'https://drive.google.com/file/d/1hCbN57rVw9TbogUmT6d2BiYVHkzEbonb/view?usp=drive_link', '✓ Available', null],
-    ['documents', '8', 'Water Health & Sanitation certificate', 'https://drive.google.com/file/d/10fat_7Zt2tYlaHDM7zk8W5gjA0mev6Jg/view?usp=drive_link', '✓ Available', null],
-    ['academic', '1', 'Fees structure', 'https://drive.google.com/file/d/1yl_zxhoXe0Yap2aNW5i2NNJ-sg4H-DVg/view?usp=drive_link', '✓ Available', 'general_academic'],
-    ['academic', '2', 'Annual Academic Calendar', 'https://drive.google.com/file/d/1uzwqM4WR-vXV1u1Rtc4rBrzsBMoBYxMZ/view?usp=drive_link', '✓ Available', 'general_academic'],
-    ['academic', '3', 'SMC List', 'https://drive.google.com/file/d/1-vKxoy3tJHrGGrHxWz5GUtTAlEOhvfxJ/view?usp=drive_link', '✓ Available', 'general_academic'],
-    ['academic', '4', 'PTA', 'https://drive.google.com/file/d/1SZPc1SI2MtQHFtvgVlRtysI9xLc0NkSL/view?usp=drive_link', '✓ Available', 'general_academic'],
+    ['documents', '1', 'Affiliation/Upgradation Letter and Recent Extension of Affiliation, if any', 'https://rrgreenfieldmadhepura.in/documents/Affiliation%20Letter.pdf', '✓ Available', null],
+    ['documents', '2', 'Societies/Trust/Company Registration/Renewal Certificate, as applicable', 'https://rrgreenfieldmadhepura.in/documents/TRUST%20REG.pdf', '✓ Available', null],
+    ['documents', '3', 'NOC', 'https://rrgreenfieldmadhepura.in/documents/NOC.pdf', '✓ Available', null],
+    ['documents', '4', 'Recognition certificate under RTE Act 2009', 'https://rrgreenfieldmadhepura.in/documents/RECOGNITION%20CERTIFICATE%20(RTE).pdf', '✓ Available', null],
+    ['documents', '5', 'Building Safety certificate', 'https://rrgreenfieldmadhepura.in/documents/Building%20Safety%20certificate.pdf', '✓ Available', null],
+    ['documents', '6', 'Fire Safety certificate', 'https://rrgreenfieldmadhepura.in/documents/Fire%20Safety%20Certificate.pdf', '✓ Available', null],
+    ['documents', '7', 'Self Certification', 'https://rrgreenfieldmadhepura.in/documents/SELF%20CERTIFICATION.pdf', '✓ Available', null],
+    ['documents', '8', 'Water Health & Sanitation certificate', 'https://rrgreenfieldmadhepura.in/documents/WATER%20HEALTH%20AND%20SANITATION%20CERTIFICATE.pdf', '✓ Available', null],
+    ['academic', '1', 'Fees structure', 'https://rrgreenfieldmadhepura.in/documents/Fees%20Structure.pdf', '✓ Available', 'general_academic'],
+    ['academic', '2', 'Annual Academic Calendar', 'https://rrgreenfieldmadhepura.in/documents/Annual%20Academic%20Calendar.pdf', '✓ Available', 'general_academic'],
+    ['academic', '3', 'SMC List', 'https://rrgreenfieldmadhepura.in/documents/SMC%20List.pdf', '✓ Available', 'general_academic'],
+    ['academic', '4', 'PTA', 'https://rrgreenfieldmadhepura.in/documents/PTA.pdf', '✓ Available', 'general_academic'],
     ['academic', '5', 'Last 3 yrs Result of the board examination as per applicability', '#', 'Not Applicable', 'general_academic'],
 ];
 
