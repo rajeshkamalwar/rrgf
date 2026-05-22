@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useScrollAnimation } from '@/hooks/use-scroll-animation';
 import {
   FileText,
@@ -26,6 +27,8 @@ import {
 import { SCHOOL_ADDRESS } from '@/lib/schoolAddress';
 
 const DEFAULT_PAYLOAD = createDefaultMpdPayloadV2();
+
+const MANDATORY_DISCLOSURE_PDF_URL = '/documents/mandatory-public-disclosure.pdf';
 
 function pickSectionIcon(sec: MpdSection): LucideIcon {
   switch (sec.type) {
@@ -158,14 +161,29 @@ const MandatoryDisclosure = () => {
               aria-labelledby={`mpd-${sec.id}`}
             >
               <div className="container mx-auto px-4">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className={`${iconWrap} w-12 h-12 rounded-full flex items-center justify-center`}>
-                    <SectionIcon className={`h-6 w-6 ${iconCls}`} aria-hidden />
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className={`${iconWrap} w-12 h-12 rounded-full flex items-center justify-center`}>
+                      <SectionIcon className={`h-6 w-6 ${iconCls}`} aria-hidden />
+                    </div>
+                    <h2 id={`mpd-${sec.id}`} className="text-3xl font-bold text-school-secondary">
+                      {sec.letter ? `${sec.letter} — ` : ''}
+                      {sec.title}
+                    </h2>
                   </div>
-                  <h2 id={`mpd-${sec.id}`} className="text-3xl font-bold text-school-secondary">
-                    {sec.letter ? `${sec.letter} — ` : ''}
-                    {sec.title}
-                  </h2>
+                  {sec.letter === 'A' ? (
+                    <Button
+                      type="button"
+                      size="lg"
+                      className="bg-yellow-400 hover:bg-yellow-500 text-school-secondary font-semibold border-0 shadow-md shrink-0"
+                      onClick={() =>
+                        window.open(MANDATORY_DISCLOSURE_PDF_URL, '_blank', 'noopener,noreferrer')
+                      }
+                    >
+                      <FileText className="h-5 w-5" aria-hidden />
+                      Mandatory Public Disclosure PDF
+                    </Button>
+                  ) : null}
                 </div>
                 {sec.id === 'documents' && showMandatoryUploadReminder ? (
                   <p className="text-school-secondary/70 mb-6 max-w-4xl">
